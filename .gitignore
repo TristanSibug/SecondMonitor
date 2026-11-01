@@ -1,0 +1,28 @@
+# ---- .NET build output ----
+bin/
+obj/
+
+# ---- the folder build-exe.bat creates (upload SecondMonitor.exe to GitHub Releases instead) ----
+app/
+app-single/
+
+# ---- your personal settings (created next to the program when you run it) ----
+settings.txt
+
+# ---- Android Studio / Gradle ----
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ---- built files: attach these to a GitHub Release instead of committing them ----
+*.apk
+*.aab
+ffmpeg.exe
+
+# ---- Windows ----
+Thumbs.db

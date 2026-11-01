@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- This is the project file. It tells .NET how to build our program. -->
+  <PropertyGroup>
+    <!-- WinExe = a normal window program (no black console window) -->
+    <OutputType>WinExe</OutputType>
+    <!-- net10.0-windows lets us use Windows-only stuff like windows and screen info -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- We need Windows Forms because it gives us the settings window and the Screen class -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <!-- The program file will be called SecondMonitor.exe -->
+    <AssemblyName>SecondMonitor</AssemblyName>
+  </PropertyGroup>
+
+</Project>
