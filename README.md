@@ -29,8 +29,8 @@ No account, no subscription, no expiry.
 
 ## Tested on
 
-Only one setup so far: a **Samsung Galaxy Tab S 10.5 LTE (Android 5.0.2)**, a Windows PC with
-**AMD graphics**, and the Virtual Display Driver.
+Only one setup so far: a **Samsung Galaxy Tab S 10.5 LTE (Android 5.0.2)**, a Windows PC running
+**AMD RX 570**, **Ryzen 5 5600**, and the Virtual Display Driver.
 
 | Part | Status |
 |---|---|
@@ -42,17 +42,17 @@ Only one setup so far: a **Samsung Galaxy Tab S 10.5 LTE (Android 5.0.2)**, a Wi
 
 Reports and fixes for other hardware are very welcome.
 
-## What you need (you provide these)
+## What you need
 
 On the PC:
 - **Windows 10 or 11, 64-bit**
 - **.NET 10 Desktop Runtime** (the .NET 10 SDK includes it)
-- **ffmpeg**, a recent build (6.0 or newer for GPU capture). Put `ffmpeg.exe` next to
-  `SecondMonitor.exe` or in your PATH
+- **ffmpeg**, a recent [build](https://github.com/ffmpeg/ffmpeg) (6.0 or newer for GPU capture).
+  Put `ffmpeg exe` next to `SecondMonitor.exe` or in your PATH
 - **adb** (Android platform-tools) in your PATH
 - A **virtual display driver** that adds a second monitor, for example
   [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver).
-  Add a mode that matches your tablet (for example 1280x800) and set the monitor to **Extend**
+  **`winget install --id=VirtualDrivers.Virtual-Display-Driver -e`**
 
 On the tablet:
 - **USB debugging** turned on (Settings > About > tap Build number 7 times, then Developer options)
@@ -97,7 +97,7 @@ If the tablet's screen is locked, the app opens behind the lock screen; unlock t
 | Monitor | The virtual monitor to send to the tablet (not your main screen). Press Refresh after changing monitors. |
 | Monitor resolution | Changes the virtual monitor's resolution (Apply, or automatically on Start). It lists only modes the virtual display driver offers, up to 60 Hz. Never changes your main screen. |
 | Video encoder | **CPU (libx264)** works everywhere and had the lowest delay. **AMD / Intel / NVIDIA** use the graphics card, which takes load off the CPU but may add delay. |
-| Screen capture | **Standard** takes screenshots in the program (most compatible). **GPU capture** lets ffmpeg grab the screen with the graphics card. It is experimental. |
+| Screen capture | **Standard** takes screenshots in the program (most compatible). **GPU capture** lets ffmpeg grab the screen with the graphics card. |
 | Frames per second | 60 is smoothest. 30 uses about half the work. |
 | Bitrate | Video quality budget. 8000 kbit/s is plenty for 1280x800. |
 | CPU encoder threads | Limits how many CPU threads libx264 may use, so a game keeps the rest. 0 = no limit. |
@@ -126,13 +126,11 @@ Neither contains .NET, so they are small but need the .NET 10 Desktop Runtime on
 **Tablet app:** open the Android project in Android Studio (Java, minSdk 21, package
 `com.example.secondmonitor`) and use **Build > Generate App Bundles or APKs > Build APK(s)**.
 
-`test-amf.bat` checks which AMD hardware-encoder options your PC accepts.
-
 ## Known limitations
 
 - Touch is one finger = left mouse button. No right-click, scrolling or multi-touch yet.
 - Standard capture draws the cursor as a plain arrow. GPU capture draws the real cursor.
-- Windows only. The tablet needs a cable (USB debugging); there is no Wi-Fi mode.
+- Windows only. The tablet needs a cable (USB debugging); there is no wireless mode.
 
 ## Troubleshooting
 
