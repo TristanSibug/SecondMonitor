@@ -89,12 +89,13 @@ Reports and fixes for other hardware are very welcome.
 
 On the PC:
 - **Windows 10 or 11, 64-bit**
-- **.NET 10 Desktop Runtime** (the .NET 10 SDK includes it)
+- **.NET 10 Desktop Runtime** (the .NET 10 SDK includes it) - [link](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 - **ffmpeg**, a recent [build](https://github.com/ffmpeg/ffmpeg) (6.0 or newer for GPU capture).
   Put `ffmpeg exe` next to `SecondMonitor.exe` or in your PATH
-- **adb** (Android platform-tools) in your PATH
+- **adb** (Android platform-tools) in your PATH - [link](https://developer.android.com/tools/releases platform-tools)
 - A **virtual display driver** that adds a second monitor, for example
   [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver).
+
   **`winget install --id=VirtualDrivers.Virtual-Display-Driver -e`**
 
 On the tablet:
