@@ -1,7 +1,7 @@
 # Second Monitor
 
 Use an Android tablet as a real **extended display** for a Windows PC over a **USB cable**.
-The PC streams H.264 video to the tablet, and touching the tablet moves and clicks the mouse.
+The PC streams H.264 video to the tablet, and the tablet works as a real **touchscreen** (swipe to scroll, pinch, multi-finger).
 No account, no subscription, no expiry.
 
 ```
@@ -18,9 +18,11 @@ No account, no subscription, no expiry.
 
 ## Features
 
-- Wired, low-delay streaming (about 85 ms at 1280x800, 60 fps in testing)
+- Wired, low-delay streaming (about 50-100 ms at 1280x800, 60 fps in testing)
 - Works on old tablets: the tablet app supports **Android 5.0+** and uses the hardware decoder
-- Touch on the tablet controls the mouse (single finger = left click and drag)
+- Real touchscreen input: Windows sees genuine touches, so swiping scrolls lists and pinching zooms.
+  Can be switched to plain mouse mode (single finger = left click and drag)
+- Close the tablet app from the PC, by a button or automatically when you press Stop
 - A settings window: pick the monitor, resolution, encoder and frame rate. No command line
 - Encoder choices: **CPU (libx264)**, AMD (AMF), Intel (QSV), NVIDIA (NVENC)
 - Screen capture choices: **Standard** or **GPU capture** (ffmpeg `ddagrab`, experimental)
@@ -39,6 +41,7 @@ Only one setup so far: a **Samsung Galaxy Tab S 10.5 LTE (Android 5.0.2)**, a Wi
 | AMD hardware encoder | Works, but had a noticeably higher delay than the CPU encoder |
 | Intel and NVIDIA encoders | Untested |
 | Automatic start / tray / auto-open tablet app | Newer, lightly tested |
+| Real touchscreen input (swipe to scroll) | Works in testing. Untick it to fall back to mouse mode |
 
 Reports and fixes for other hardware are very welcome.
 
@@ -74,8 +77,8 @@ On the tablet:
 4. Drag windows onto the extended display.
 
 Your choices are saved in `settings.txt` next to the program.
-If something goes wrong with the cable, press **Fix USB (adb)**. **Open tablet app** opens the app on
-the tablet by hand.
+If something goes wrong with the cable, press **Fix USB (adb)**. **Open tablet app** and
+**Close tablet app** open and close the app on the tablet by hand.
 
 ### Automatic start
 
@@ -105,6 +108,8 @@ If the tablet's screen is locked, the app opens behind the lock screen; unlock t
 | Lower priority | Windows gives a game the CPU first. The tablet video may stutter a little instead. |
 | Show FPS number | Shows frames per second in the window. Off is smoothest. |
 | Open tablet app automatically | When the tablet is plugged in, opens the app on it using adb. If you rename the Android package, change `TabletAppComponent` in `StreamEngine.cs`. |
+| Close tablet app when stopped | Closes the app on the tablet when you press Stop or exit the program. |
+| Real touchscreen input | Sends genuine touch input to Windows (swipe to scroll, pinch to zoom). Unticked, one finger acts as the mouse. If Windows refuses touch input, the program falls back to mouse mode by itself. |
 | Run when Windows starts | Adds the program to your Windows startup list (your user account only). |
 | Start streaming when opened | Starts streaming as soon as the program opens. |
 | Start hidden in the tray | Opens without a window, as an icon in the system tray. |
@@ -128,7 +133,8 @@ Neither contains .NET, so they are small but need the .NET 10 Desktop Runtime on
 
 ## Known limitations
 
-- Touch is one finger = left mouse button. No right-click, scrolling or multi-touch yet.
+- Programs that don't support touch only react to taps, not swipes. Windows that run as administrator ignore touch unless `SecondMonitor.exe` also runs as administrator.
+- The tablet app and `SecondMonitor.exe` must be updated together: a new app with an old exe sends no usable touch.
 - Standard capture draws the cursor as a plain arrow. GPU capture draws the real cursor.
 - Windows only. The tablet needs a cable (USB debugging); there is no wireless mode.
 
