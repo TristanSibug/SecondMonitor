@@ -92,7 +92,8 @@ On the PC:
 - **.NET 10 Desktop Runtime** (the .NET 10 SDK includes it) - [link](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 - **ffmpeg**, a recent [build](https://github.com/ffmpeg/ffmpeg) (6.0 or newer for GPU capture).
   Put `ffmpeg exe` next to `SecondMonitor.exe` or in your PATH
-- **adb** (Android platform-tools) in your PATH - [link](https://developer.android.com/tools/releases platform-tools)
+- **adb** (Android platform-tools) in your PATH -
+[link](https://developer.android.com/tools/releases/platform-tools)
 - A **virtual display driver** that adds a second monitor, for example
   [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver).
 
