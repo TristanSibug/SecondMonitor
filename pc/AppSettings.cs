@@ -33,6 +33,8 @@ class AppSettings
     public bool StartInTray = false;      // when the program opens, hide the window in the system tray
     public bool CloseToTray = false;      // closing the window keeps the program running in the tray
     public bool AutoOpenTabletApp = true; // open the app on the tablet by itself when the tablet is plugged in
+    public bool TouchScreenInput = true;  // true = real touchscreen input (swipe to scroll, pinch...), false = mouse only
+    public bool CloseTabletOnStop = false; // close the tablet app when you press Stop or exit the program
 
     // ------------------------------------------------------------------
     // Where the settings file lives
@@ -81,6 +83,8 @@ class AppSettings
                 else if (name == "StartInTray" && bool.TryParse(value, out flag)) s.StartInTray = flag;
                 else if (name == "CloseToTray" && bool.TryParse(value, out flag)) s.CloseToTray = flag;
                 else if (name == "AutoOpenTabletApp" && bool.TryParse(value, out flag)) s.AutoOpenTabletApp = flag;
+                else if (name == "TouchScreenInput" && bool.TryParse(value, out flag)) s.TouchScreenInput = flag;
+                else if (name == "CloseTabletOnStop" && bool.TryParse(value, out flag)) s.CloseTabletOnStop = flag;
             }
         }
         catch
@@ -114,7 +118,9 @@ class AppSettings
                 "AutoStartStreaming=" + AutoStartStreaming,
                 "StartInTray=" + StartInTray,
                 "CloseToTray=" + CloseToTray,
-                "AutoOpenTabletApp=" + AutoOpenTabletApp
+                "AutoOpenTabletApp=" + AutoOpenTabletApp,
+                "TouchScreenInput=" + TouchScreenInput,
+                "CloseTabletOnStop=" + CloseTabletOnStop
             };
             File.WriteAllLines(FilePath(), lines);
         }

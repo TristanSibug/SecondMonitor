@@ -44,6 +44,8 @@ class MainForm : Form
     CheckBox priorityCheck;       // tick box: lower priority
     CheckBox showFpsCheck;        // tick box: show FPS
     CheckBox autoOpenCheck;       // tick box: open the tablet app automatically
+    CheckBox touchCheck;          // tick box: real touchscreen input (swipe to scroll)
+    CheckBox closeTabletCheck;    // tick box: close the tablet app when streaming stops
     CheckBox runWithWindowsCheck; // tick box: run when Windows starts
     CheckBox autoStartCheck;      // tick box: start streaming when the program opens
     CheckBox startInTrayCheck;    // tick box: start hidden in the tray
@@ -54,6 +56,7 @@ class MainForm : Form
     Button stopButton;
     Button adbButton;             // button: run "adb reverse" again
     Button openTabletButton;      // button: open the app on the tablet now
+    Button closeTabletButton;     // button: close the app on the tablet now
     Label statusLabel;
     Label statsLabel;
     TextBox logBox;               // the big text area at the bottom
@@ -115,7 +118,7 @@ class MainForm : Form
         Text = "Second Monitor";
         AutoScaleDimensions = new SizeF(96F, 96F); // lets the window grow on high-DPI screens
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(560, 664);
+        ClientSize = new Size(560, 670);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -222,50 +225,58 @@ class MainForm : Form
         showFpsCheck = AddCheck("Show FPS number", 16, 316);
         autoOpenCheck = AddCheck("Open tablet app automatically", 16, 342);
         runWithWindowsCheck = AddCheck("Run when Windows starts", 16, 368);
+        closeTabletCheck = AddCheck("Close tablet app when stopped", 16, 394);
 
         autoStartCheck = AddCheck("Start streaming when opened", 282, 290);
         startInTrayCheck = AddCheck("Start hidden in the tray", 282, 316);
         closeToTrayCheck = AddCheck("Keep running in tray when closed", 282, 342);
+        touchCheck = AddCheck("Real touchscreen input (swipe)", 282, 368);
 
         startButton = new Button();
         startButton.Text = "Start";
-        startButton.SetBounds(16, 404, 120, 32);
+        startButton.SetBounds(16, 430, 92, 32);
         startButton.Click += OnStartClicked;
         Controls.Add(startButton);
 
         stopButton = new Button();
         stopButton.Text = "Stop";
-        stopButton.SetBounds(146, 404, 120, 32);
+        stopButton.SetBounds(114, 430, 92, 32);
         stopButton.Click += OnStopClicked;
         Controls.Add(stopButton);
 
         adbButton = new Button();
         adbButton.Text = "Fix USB (adb)";
-        adbButton.SetBounds(276, 404, 134, 32);
+        adbButton.SetBounds(212, 430, 104, 32);
         adbButton.Click += OnAdbClicked;
         Controls.Add(adbButton);
 
         openTabletButton = new Button();
         openTabletButton.Text = "Open tablet app";
-        openTabletButton.SetBounds(420, 404, 124, 32);
+        openTabletButton.SetBounds(322, 430, 108, 32);
         openTabletButton.Click += OnOpenTabletClicked;
         Controls.Add(openTabletButton);
 
+        closeTabletButton = new Button();
+        closeTabletButton.Text = "Close tablet app";
+        closeTabletButton.SetBounds(436, 430, 108, 32);
+        closeTabletButton.Click += OnCloseTabletClicked;
+        Controls.Add(closeTabletButton);
+
         statusLabel = new Label();
         statusLabel.Text = "Status: Stopped";
-        statusLabel.SetBounds(16, 448, 528, 20);
+        statusLabel.SetBounds(16, 474, 528, 20);
         Controls.Add(statusLabel);
 
         statsLabel = new Label();
         statsLabel.Text = "";
-        statsLabel.SetBounds(16, 470, 528, 20);
+        statsLabel.SetBounds(16, 496, 528, 20);
         Controls.Add(statsLabel);
 
         logBox = new TextBox();
         logBox.Multiline = true;
         logBox.ReadOnly = true;
         logBox.ScrollBars = ScrollBars.Vertical;
-        logBox.SetBounds(16, 498, 528, 150);
+        logBox.SetBounds(16, 524, 528, 130);
         Controls.Add(logBox);
     }
 
@@ -595,6 +606,8 @@ class MainForm : Form
         priorityCheck.Checked = settings.LowerPriority;
         showFpsCheck.Checked = settings.ShowFps;
         autoOpenCheck.Checked = settings.AutoOpenTabletApp;
+        touchCheck.Checked = settings.TouchScreenInput;
+        closeTabletCheck.Checked = settings.CloseTabletOnStop;
         autoStartCheck.Checked = settings.AutoStartStreaming;
         startInTrayCheck.Checked = settings.StartInTray;
         closeToTrayCheck.Checked = settings.CloseToTray;
@@ -634,6 +647,8 @@ class MainForm : Form
         settings.LowerPriority = priorityCheck.Checked;
         settings.ShowFps = showFpsCheck.Checked;
         settings.AutoOpenTabletApp = autoOpenCheck.Checked;
+        settings.TouchScreenInput = touchCheck.Checked;
+        settings.CloseTabletOnStop = closeTabletCheck.Checked;
         settings.AutoStartStreaming = autoStartCheck.Checked;
         settings.StartInTray = startInTrayCheck.Checked;
         settings.CloseToTray = closeToTrayCheck.Checked;
@@ -658,6 +673,8 @@ class MainForm : Form
         priorityCheck.Enabled = !isRunning;
         showFpsCheck.Enabled = !isRunning;
         autoOpenCheck.Enabled = !isRunning;
+        touchCheck.Enabled = !isRunning;
+        closeTabletCheck.Enabled = !isRunning;
         autoStartCheck.Enabled = !isRunning;
         startInTrayCheck.Enabled = !isRunning;
         closeToTrayCheck.Enabled = !isRunning;
@@ -726,6 +743,14 @@ class MainForm : Form
     {
         engine.Stop();
         SetRunning(false);
+
+        // Optionally close the app on the tablet too (adb can be slow, so use another thread)
+        if (closeTabletCheck.Checked)
+        {
+            Thread worker = new Thread(delegate () { engine.CloseTabletApp(); });
+            worker.IsBackground = true;
+            worker.Start();
+        }
     }
 
     void OnAdbClicked(object sender, EventArgs e)
@@ -739,6 +764,13 @@ class MainForm : Form
     void OnOpenTabletClicked(object sender, EventArgs e)
     {
         Thread worker = new Thread(delegate () { engine.OpenTabletApp(); });
+        worker.IsBackground = true;
+        worker.Start();
+    }
+
+    void OnCloseTabletClicked(object sender, EventArgs e)
+    {
+        Thread worker = new Thread(delegate () { engine.CloseTabletApp(); });
         worker.IsBackground = true;
         worker.Start();
     }
@@ -760,6 +792,7 @@ class MainForm : Form
             settings.Save();
         }
         engine.Stop();
+        if (closeTabletCheck.Checked) engine.CloseTabletApp(); // do it now: the program is about to exit
 
         trayIcon.Visible = false;
         trayIcon.Dispose();

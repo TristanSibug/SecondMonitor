@@ -17,6 +17,7 @@
 // ============================================================================
 
 using System;
+using System.Collections.Generic;    // Dictionary (to remember each finger on the screen)
 using System.ComponentModel;          // Win32Exception (the error when a program is not found)
 using System.Diagnostics;             // Process (to run ffmpeg/adb), Stopwatch (timing)
 using System.Drawing;                 // Bitmap, Graphics, Rectangle (for screenshots)
@@ -38,9 +39,10 @@ class StreamEngine
     const int Port = 7777;               // must match "adb reverse" and the Android app
     const string FfmpegPath = "ffmpeg";  // works if ffmpeg.exe is next to this program or in PATH
 
-    // The tablet app's name, used to open it with adb. It is "package name / activity name".
-    // If you rename the package in the Android project, change it here too.
-    const string TabletAppComponent = "com.example.secondmonitor/.MainActivity";
+    // The tablet app's name, used to open and close it with adb.
+    // If you rename the package in the Android project, change TabletPackage here too.
+    const string TabletPackage = "com.example.secondmonitor";
+    const string TabletAppComponent = TabletPackage + "/.MainActivity"; // "package name / activity name"
 
     // ------------------------------------------------------------------
     // Messages we send to the window. The window "subscribes" to these.
@@ -71,6 +73,80 @@ class StreamEngine
     const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
     // ------------------------------------------------------------------
+    // Windows TOUCH INJECTION: lets a program pretend to be a touchscreen.
+    // Windows then treats our fingers like real ones: swipe to scroll, pinch to zoom, etc.
+    // These structures must match Windows' own layout EXACTLY, so do not rearrange them.
+    // ------------------------------------------------------------------
+    [StructLayout(LayoutKind.Sequential)]
+    struct POINT
+    {
+        public int x;
+        public int y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct RECT
+    {
+        public int left;
+        public int top;
+        public int right;
+        public int bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct POINTER_INFO
+    {
+        public uint pointerType;            // 2 = touch
+        public uint pointerId;              // which finger (0, 1, 2 ...)
+        public uint frameId;
+        public uint pointerFlags;           // down / moving / up
+        public IntPtr sourceDevice;
+        public IntPtr hwndTarget;
+        public POINT ptPixelLocation;       // where on the screen (in pixels)
+        public POINT ptHimetricLocation;
+        public POINT ptPixelLocationRaw;
+        public POINT ptHimetricLocationRaw;
+        public uint dwTime;
+        public uint historyCount;
+        public int inputData;
+        public uint dwKeyStates;
+        public ulong performanceCount;
+        public int buttonChangeType;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct POINTER_TOUCH_INFO
+    {
+        public POINTER_INFO pointerInfo;
+        public uint touchFlags;
+        public uint touchMask;
+        public RECT rcContact;              // the little area the fingertip covers
+        public RECT rcContactRaw;
+        public uint orientation;
+        public uint pressure;
+    }
+
+    // Turns touch injection on for this thread. maxCount = how many fingers at once.
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern bool InitializeTouchInjection(uint maxCount, uint feedbackMode);
+
+    // Sends the current state of all fingers to Windows.
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern bool InjectTouchInput(uint count, [In] POINTER_TOUCH_INFO[] contacts);
+
+    const uint TOUCH_FEEDBACK_NONE = 0x3;       // do not draw touch circles on screen
+    const uint PT_TOUCH = 2;                    // "this pointer is a touch"
+    const uint POINTER_FLAG_INRANGE = 0x00000002;
+    const uint POINTER_FLAG_INCONTACT = 0x00000004;
+    const uint POINTER_FLAG_DOWN = 0x00010000;  // finger just touched
+    const uint POINTER_FLAG_UPDATE = 0x00020000; // finger is still there (maybe moved)
+    const uint POINTER_FLAG_UP = 0x00040000;    // finger just lifted
+    const uint TOUCH_MASK_CONTACTAREA = 0x00000001;
+    const uint TOUCH_MASK_ORIENTATION = 0x00000002;
+    const uint TOUCH_MASK_PRESSURE = 0x00000004;
+    const int MaxTouchPoints = 10;              // we follow up to 10 fingers
+
+    // ------------------------------------------------------------------
     // Things this class remembers while it runs
     // ------------------------------------------------------------------
     AppSettings settings;                 // the options chosen in the window
@@ -83,6 +159,7 @@ class StreamEngine
     volatile TcpListener currentListener; // the "door" waiting for the tablet (so Stop() can close it)
     volatile string deviceSerial;         // the plugged-in tablet's adb name (null = none known yet)
     bool adbMissingLogged = false;        // so we only tell you once that adb was not found
+    bool touchErrorLogged = false;        // so we only tell you once that touch injection failed
 
     // ==================================================================
     // Small helpers to send messages to the window
@@ -344,6 +421,29 @@ class StreamEngine
         else
         {
             WriteLog("Opened the app on the tablet.");
+        }
+    }
+
+    // ==================================================================
+    // CloseTabletApp: closes the Second Monitor app on the tablet using adb
+    // ("force-stop" = stop the app completely).
+    // (public so the window can call it from a button, and when you press Stop)
+    // ==================================================================
+    public void CloseTabletApp()
+    {
+        string text = RunAndCaptureText("adb", AdbPrefix() + "shell am force-stop " + TabletPackage, 8000);
+        if (text == null)
+        {
+            WriteLog("Could not run adb. Is Android platform-tools in your PATH?");
+        }
+        else if (text.IndexOf("Error", StringComparison.OrdinalIgnoreCase) >= 0
+                 || text.IndexOf("no devices", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            WriteLog("Could not close the app on the tablet: " + text.Trim());
+        }
+        else
+        {
+            WriteLog("Closed the app on the tablet.");
         }
     }
 
@@ -1017,15 +1117,33 @@ class StreamEngine
     }
 
     // ==================================================================
-    // ReadTouchLoop: listens for lines like "D 0.25 0.50" from the tablet
-    //   First letter:  D = finger down, M = finger moved, U = finger lifted
-    //   Next two numbers: position as a fraction of the screen (0.0 to 1.0)
-    //     0.0 0.0 = top-left corner, 1.0 1.0 = bottom-right corner
+    // ReadTouchLoop: listens for touch lines from the tablet.
+    //   New format:    "T D 1 0.25 0.50"   (T, action, finger number, x, y)
+    //   Old format:    "D 0.25 0.50"       (action, x, y: one finger only)
+    //   action: D = finger down, M = finger moved, U = finger lifted
+    //   x and y are fractions of the screen (0.0 = left/top, 1.0 = right/bottom)
     // ==================================================================
     void ReadTouchLoop(NetworkStream stream)
     {
+        TouchInjector injector = null;
+        int mouseFinger = -1; // in mouse mode: which finger is acting as the mouse (-1 = none)
+
         try
         {
+            // Start real touch input if the option is ticked
+            if (settings.TouchScreenInput)
+            {
+                TouchInjector candidate = new TouchInjector();
+                string message;
+                if (candidate.Init(out message)) injector = candidate;
+                WriteLog(message);
+                if (injector == null) WriteLog("Falling back to mouse mode (one finger = mouse).");
+            }
+            else
+            {
+                WriteLog("Mouse mode: one finger = left mouse button.");
+            }
+
             StreamReader reader = new StreamReader(stream);
             while (true)
             {
@@ -1033,28 +1151,74 @@ class StreamEngine
                 if (line == null) return;        // null = tablet disconnected
 
                 string[] parts = line.Split(' ');
-                if (parts.Length != 3) continue; // ignore garbage
+                char action;
+                int id;
+                float fx, fy;
 
-                char action = parts[0][0];
-                float fx = float.Parse(parts[1], CultureInfo.InvariantCulture);
-                float fy = float.Parse(parts[2], CultureInfo.InvariantCulture);
+                if (parts.Length == 5 && parts[0] == "T")
+                {
+                    action = parts[1][0];
+                    id = int.Parse(parts[2], CultureInfo.InvariantCulture);
+                    fx = float.Parse(parts[3], CultureInfo.InvariantCulture);
+                    fy = float.Parse(parts[4], CultureInfo.InvariantCulture);
+                }
+                else if (parts.Length == 3) // old app: a single finger
+                {
+                    action = parts[0][0];
+                    id = 0;
+                    fx = float.Parse(parts[1], CultureInfo.InvariantCulture);
+                    fy = float.Parse(parts[2], CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    continue; // ignore garbage
+                }
 
                 // Convert the 0..1 fractions into real desktop pixels on OUR monitor.
                 int px = monitorBounds.X + (int)(fx * (monitorBounds.Width - 1));
                 int py = monitorBounds.Y + (int)(fy * (monitorBounds.Height - 1));
 
-                // Move the mouse there
-                SetCursorPos(px, py);
+                if (injector != null)
+                {
+                    if (!injector.Handle(action, id, px, py))
+                    {
+                        WriteLog("Windows refused the touch input (error " + injector.LastError + "). Switching to mouse mode.");
+                        injector.ReleaseAll();
+                        injector = null;
+                    }
+                    else
+                    {
+                        continue; // handled as real touch
+                    }
+                }
 
-                // Press or release the left mouse button depending on the action
-                if (action == 'D') mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
-                if (action == 'U') mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
-                // 'M' (move) only needs the SetCursorPos above, which already ran.
+                // ---- Mouse mode: only the first finger counts ----
+                if (action == 'D' && mouseFinger == -1)
+                {
+                    mouseFinger = id;
+                    SetCursorPos(px, py);
+                    mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, UIntPtr.Zero);
+                }
+                else if (id == mouseFinger)
+                {
+                    SetCursorPos(px, py);
+                    if (action == 'U')
+                    {
+                        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
+                        mouseFinger = -1;
+                    }
+                }
             }
         }
         catch
         {
             // Connection closed. Nothing to do.
+        }
+        finally
+        {
+            // Never leave a finger or the mouse button stuck down
+            if (injector != null) injector.ReleaseAll();
+            if (mouseFinger != -1) mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
         }
     }
 }
