@@ -1,28 +1,68 @@
-# Second Monitor
+<p align="center"><img src="Logo.png" width="180"></p>
+<h1 align="center">Second Monitor</h1>
+
+<p align="center">
+  <b>Turn your Android tablet into a real extended monitor and touchscreen for your Windows PC, over a USB cable, with low latency.</b>
+</p>
+
+<p align="center">
+  <img alt="Android 5.0+" src="https://img.shields.io/badge/Android-5.0%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white">
+  <img alt=".NET 10" src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white">
+  <img alt="Wired USB" src="https://img.shields.io/badge/link-USB%20(adb)-lightgrey">
+</p>
+
+<p align="center">
+  Windows &middot; Android tablets &middot; C# + Java &middot; H.264 over USB
+</p>
+
+<p align="center">
+  <a href="../../releases">Download</a> &middot;
+  <a href="#install">Install</a> &middot;
+  <a href="#use">Use</a> &middot;
+  <a href="#how-it-works">How it works</a> &middot;
+  <a href="#options">Options</a> &middot;
+  <a href="#build-from-source">Build</a> &middot;
+  <a href="#troubleshooting">Troubleshooting</a>
+</p>
+
+---
 
 Use an Android tablet as a real **extended display** for a Windows PC over a **USB cable**.
 The PC streams H.264 video to the tablet, and the tablet works as a real **touchscreen** (swipe to scroll, pinch, multi-finger).
 No account, no subscription, no expiry.
 
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph PC["Windows PC"]
+        VD["Virtual display<br/>(second monitor)"] --> CAP["Screen capture"]
+        CAP --> ENC["ffmpeg encoder<br/>H.264 (CPU or GPU)"]
+        INJ["Touch injection<br/>(multi-finger)"]
+    end
+
+    subgraph TAB["Android tablet"]
+        DEC["MediaCodec<br/>H.264 decoder"] --> SURF["Full-screen<br/>surface"]
+        SURF --> TCH["Touch events<br/>(every finger)"]
+    end
+
+    ENC -- "video over USB (adb reverse)" --> DEC
+    TCH -- "touch events" --> INJ
+    INJ -.-> VD
 ```
- Windows PC                                          Tablet
- ┌─────────────────────────────────┐  USB cable  ┌─────────────────────────┐
- │ Virtual display driver          │             │ Second Monitor app      │
- │  (a fake 2nd monitor)           │ adb reverse │                         │
- │       │                         │             │  hardware H.264 decoder │
- │ SecondMonitor.exe (settings     │ ──video───▶ │  (MediaCodec)           │
- │  window) + ffmpeg (H.264)       │ ◀─touches── │  draws to the screen,   │
- │                                 │             │  sends touches          │
- └─────────────────────────────────┘             └─────────────────────────┘
-```
+
+The PC streams the virtual monitor as H.264 video over the USB cable, and the tablet draws it with its
+hardware decoder. Your finger touches travel back over the same cable and Windows treats them as a real
+touchscreen.
 
 ## Features
 
-- Wired, low-delay streaming (about 50-100 ms at 1280x800, 60 fps in testing)
+- Wired, low-delay streaming (about 110-170 ms at 1280x800, 60 fps in testing)
 - Works on old tablets: the tablet app supports **Android 5.0+** and uses the hardware decoder
 - Real touchscreen input: Windows sees genuine touches, so swiping scrolls lists and pinching zooms.
   Can be switched to plain mouse mode (single finger = left click and drag)
-- Close the tablet app from the PC, by a button or automatically when you press Stop
+- Open and close the tablet app from the PC, by a button or automatically
 - A settings window: pick the monitor, resolution, encoder and frame rate. No command line
 - Encoder choices: **CPU (libx264)**, AMD (AMF), Intel (QSV), NVIDIA (NVENC)
 - Screen capture choices: **Standard** or **GPU capture** (ffmpeg `ddagrab`, experimental)
