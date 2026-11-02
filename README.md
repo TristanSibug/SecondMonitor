@@ -32,6 +32,8 @@ Use an Android tablet as a real **extended display** for a Windows PC over a **U
 The PC streams H.264 video to the tablet, and the tablet works as a real **touchscreen** (swipe to scroll, pinch, multi-finger).
 No account, no subscription, no expiry.
 
+<p align="center"><img src="UI.png" width="480"></p>
+
 ## How it works
 
 ```mermaid
