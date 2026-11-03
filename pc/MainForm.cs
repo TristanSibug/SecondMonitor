@@ -79,6 +79,8 @@ class MainForm : Form
 
     // true when the program is really being closed (Exit in the tray menu)
     bool exitRequested = false;
+    volatile bool showRequested = false;   // set when a second copy of the program asks us to show the window
+    System.Windows.Forms.Timer showTimer;  // checks that flag a few times a second
     Microsoft.Win32.SessionEndingEventHandler sessionEndingHandler; // told when Windows shuts down / logs off
 
     // The encoder choices. Both lists are in the SAME order:
@@ -150,6 +152,20 @@ class MainForm : Form
             engine.PrepareForShutdown();
         };
         Microsoft.Win32.SystemEvents.SessionEnding += sessionEndingHandler;
+
+        // If someone opens SecondMonitor.exe a second time, that copy closes itself and asks THIS
+        // copy to show its window instead. This timer notices the request.
+        showTimer = new System.Windows.Forms.Timer();
+        showTimer.Interval = 300;
+        showTimer.Tick += delegate
+        {
+            if (showRequested)
+            {
+                showRequested = false;
+                ShowFromTray();
+            }
+        };
+        showTimer.Start();
 
         // Make sure the window's handle exists even if the window stays hidden,
         // otherwise the messages above could not reach the log.
@@ -359,6 +375,13 @@ class MainForm : Form
             // Broken icon file: fall through to the plain icon.
         }
         return SystemIcons.Application;
+    }
+
+    // Called (from another thread) when a second copy of the program was started.
+    // It only sets a flag; the timer above then shows the window on the window's own thread.
+    public void RequestShow()
+    {
+        showRequested = true;
     }
 
     // Brings the window back from the tray

@@ -313,7 +313,7 @@ class StreamEngine
             if (gotLock) Monitor.Exit(netWriteLock);
         }
 
-        Thread.Sleep(150); // give the message a moment to leave before the connection is closed
+        Thread.Sleep(400); // give the message a moment to leave before the connection is closed
     }
 
     // ==================================================================
