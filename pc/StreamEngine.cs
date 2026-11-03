@@ -17,6 +17,7 @@
 // ============================================================================
 
 using System;
+using System.Collections.Concurrent;  // ConcurrentQueue (a list two threads can safely share)
 using System.Collections.Generic;    // Dictionary (to remember each finger on the screen)
 using System.ComponentModel;          // Win32Exception (the error when a program is not found)
 using System.Diagnostics;             // Process (to run ffmpeg/adb), Stopwatch (timing)
@@ -155,11 +156,22 @@ class StreamEngine
     volatile bool running = false;        // true between Start() and Stop()
     volatile int generation = 0;          // goes up by 1 on every Start(), so old threads can tell they are outdated
     volatile TcpClient currentClient;     // the tablet connection (so Stop() can close it)
+    volatile NetworkStream currentNet;    // the same connection as a stream (so we can say goodbye on it)
+    readonly object netWriteLock = new object(); // only one thread may write to the tablet at a time
+
+    // True once Windows is shutting down (or the user is logging off). From then on we never start
+    // adb: Windows refuses to start new programs during shutdown and shows an "adb.exe" error.
+    static volatile bool shuttingDown = false;
     volatile Process currentFfmpeg;       // the running ffmpeg (so Stop() can close it)
     volatile TcpListener currentListener; // the "door" waiting for the tablet (so Stop() can close it)
     volatile string deviceSerial;         // the plugged-in tablet's adb name (null = none known yet)
     bool adbMissingLogged = false;        // so we only tell you once that adb was not found
     bool touchErrorLogged = false;        // so we only tell you once that touch injection failed
+
+    // Timing test (only used when "Show FPS number" is ticked, standard capture only).
+    // The capture thread writes down the time each screenshot started; the sending thread
+    // reads them back when that picture has been sent, and so measures how long the PC took.
+    readonly ConcurrentQueue<long> frameStamps = new ConcurrentQueue<long>();
 
     // ==================================================================
     // Small helpers to send messages to the window
@@ -270,6 +282,52 @@ class StreamEngine
     }
 
     // ==================================================================
+    // SayGoodbye: tells the tablet app to close ITSELF, through the video connection.
+    // No adb is needed, so this also works while Windows is shutting down.
+    // (An old tablet app does not understand it and just reconnects later; harmless.)
+    // ==================================================================
+    public void SayGoodbye()
+    {
+        NetworkStream net = currentNet;
+        if (net == null) return; // no tablet connected
+
+        bool gotLock = false;
+        try
+        {
+            // Wait at most half a second for the video sender to finish its current picture
+            gotLock = Monitor.TryEnter(netWriteLock, 500);
+            if (!gotLock) return;
+
+            // A picture size of -1 is our secret "goodbye" signal
+            byte[] bye = new byte[4];
+            PutInt(bye, 0, -1);
+            net.Write(bye, 0, 4);
+            net.Flush();
+        }
+        catch
+        {
+            // The tablet is already gone. Nothing to do.
+        }
+        finally
+        {
+            if (gotLock) Monitor.Exit(netWriteLock);
+        }
+
+        Thread.Sleep(150); // give the message a moment to leave before the connection is closed
+    }
+
+    // ==================================================================
+    // PrepareForShutdown: call this the moment Windows starts shutting down / logging off.
+    // It stops all new adb runs and tells the tablet app to close itself.
+    // ==================================================================
+    public void PrepareForShutdown()
+    {
+        if (shuttingDown) return; // already done
+        shuttingDown = true;
+        SayGoodbye();
+    }
+
+    // ==================================================================
     // RunAdbReverse: runs "adb reverse tcp:7777 tcp:7777"
     // (public so the window's button can run it again after re-plugging the cable)
     // ==================================================================
@@ -314,6 +372,7 @@ class StreamEngine
         string text = RunAndCaptureText("adb", "devices", 8000);
         if (text == null)
         {
+            if (shuttingDown) return; // Windows is shutting down: not an error worth reporting
             if (!adbMissingLogged)
             {
                 WriteLog("Could not run adb. Is Android platform-tools in your PATH?");
@@ -514,6 +573,7 @@ class StreamEngine
                 {
                     client.Close();
                     currentClient = null;
+                    currentNet = null;
                 }
 
                 // If it ended almost immediately, something is wrong (for example ffmpeg refused
@@ -544,6 +604,7 @@ class StreamEngine
     {
         client.NoDelay = true; // send small packets right away (less lag)
         NetworkStream net = client.GetStream();
+        currentNet = net; // so SayGoodbye() can reach the tablet
 
         // The monitor may have been moved or resized in Windows' display settings since
         // we pressed Start, so look up its CURRENT position and size.
@@ -811,6 +872,9 @@ class StreamEngine
     // ==================================================================
     static string RunAndCaptureText(string file, string arguments, int timeoutMs)
     {
+        // During Windows shutdown, starting a program fails with an error pop-up. So do not even try.
+        if (shuttingDown) return null;
+
         ProcessStartInfo info = new ProcessStartInfo(file, arguments);
         info.UseShellExecute = false;
         info.RedirectStandardOutput = true;
@@ -902,10 +966,23 @@ class StreamEngine
         long ticksPerFrame = Stopwatch.Frequency / fps;
         long nextFrameAt = Stopwatch.GetTimestamp();
 
+        // Timing test numbers (reported in the log every 5 seconds when "Show FPS number" is ticked)
+        bool timing = settings.ShowFps;
+        long sumShotTicks = 0, maxShotTicks = 0;   // time to take the screenshot and copy it
+        long sumWriteTicks = 0, maxWriteTicks = 0; // time spent waiting to hand the frame to ffmpeg
+        int timedFrames = 0;
+        Stopwatch reportTimer = Stopwatch.StartNew();
+
+        // Forget stamps left over from an earlier connection
+        long oldStamp;
+        while (frameStamps.TryDequeue(out oldStamp)) { }
+
         try
         {
             while (running)
             {
+                long frameStart = Stopwatch.GetTimestamp(); // for the timing test
+
                 // (a) Take a screenshot of just the virtual monitor
                 graphics.CopyFromScreen(
                     monitorBounds.X, monitorBounds.Y, // where to start on the desktop
@@ -933,9 +1010,37 @@ class StreamEngine
                 Marshal.Copy(data.Scan0, frameBytes, 0, frameBytes.Length);
                 shot.UnlockBits(data);
 
+                long shotDone = Stopwatch.GetTimestamp(); // for the timing test
+                if (timing) frameStamps.Enqueue(frameStart); // the sending thread will match this to the picture
+
                 // (d) Give the frame to ffmpeg. If ffmpeg is busy this waits, which
                 // naturally slows us down to the speed of the encoder.
                 toFfmpeg.Write(frameBytes, 0, frameBytes.Length);
+
+                if (timing)
+                {
+                    long writeDone = Stopwatch.GetTimestamp();
+                    long shotTicks = shotDone - frameStart;
+                    long writeTicks = writeDone - shotDone;
+                    sumShotTicks += shotTicks;
+                    sumWriteTicks += writeTicks;
+                    if (shotTicks > maxShotTicks) maxShotTicks = shotTicks;
+                    if (writeTicks > maxWriteTicks) maxWriteTicks = writeTicks;
+                    timedFrames++;
+
+                    if (reportTimer.ElapsedMilliseconds >= 5000 && timedFrames > 0)
+                    {
+                        double toMs = 1000.0 / Stopwatch.Frequency; // ticks -> milliseconds
+                        WriteLog("[timing] screenshot: average " + (sumShotTicks * toMs / timedFrames).ToString("F1", CultureInfo.InvariantCulture)
+                            + " ms, worst " + (maxShotTicks * toMs).ToString("F1", CultureInfo.InvariantCulture)
+                            + " ms   |   handing frame to ffmpeg: average " + (sumWriteTicks * toMs / timedFrames).ToString("F1", CultureInfo.InvariantCulture)
+                            + " ms, worst " + (maxWriteTicks * toMs).ToString("F1", CultureInfo.InvariantCulture) + " ms");
+                        sumShotTicks = 0; maxShotTicks = 0;
+                        sumWriteTicks = 0; maxWriteTicks = 0;
+                        timedFrames = 0;
+                        reportTimer.Restart();
+                    }
+                }
 
                 // (e) Wait until it is time for the next frame.
                 nextFrameAt += ticksPerFrame;
@@ -988,6 +1093,11 @@ class StreamEngine
         long bytesThisSecond = 0;
         Stopwatch fpsTimer = Stopwatch.StartNew();
 
+        // Timing test: how long from "screenshot started" until "picture sent to the tablet"
+        long sumPcTicks = 0, maxPcTicks = 0;
+        int pcFrames = 0;
+        Stopwatch pcReportTimer = Stopwatch.StartNew();
+
         try
         {
             while (true)
@@ -1034,10 +1144,40 @@ class StreamEngine
                     }
                     PutInt(sendBuffer, 0, pictureSize);
                     Buffer.BlockCopy(pending, 0, sendBuffer, 4, pictureSize);
-                    net.Write(sendBuffer, 0, pictureSize + 4);
+                    lock (netWriteLock)
+                    {
+                        net.Write(sendBuffer, 0, pictureSize + 4);
+                    }
 
                     // Remove the sent picture from the front of 'pending'
                     RemoveFront(pending, ref pendingLength, boundary);
+
+                    // Timing test (standard capture only: GPU capture has no screenshot time to compare with)
+                    if (settings.ShowFps && !settings.GpuCapture)
+                    {
+                        // If pictures were skipped, the list of start times grows. Throw away the oldest ones.
+                        long skipped;
+                        while (frameStamps.Count > 20) frameStamps.TryDequeue(out skipped);
+
+                        long startedAt;
+                        if (frameStamps.TryDequeue(out startedAt))
+                        {
+                            long pcTicks = Stopwatch.GetTimestamp() - startedAt;
+                            sumPcTicks += pcTicks;
+                            if (pcTicks > maxPcTicks) maxPcTicks = pcTicks;
+                            pcFrames++;
+
+                            if (pcReportTimer.ElapsedMilliseconds >= 5000 && pcFrames > 0)
+                            {
+                                double toMs = 1000.0 / Stopwatch.Frequency;
+                                WriteLog("[timing] PC total (screenshot start -> picture sent to tablet): average "
+                                    + (sumPcTicks * toMs / pcFrames).ToString("F1", CultureInfo.InvariantCulture)
+                                    + " ms, worst " + (maxPcTicks * toMs).ToString("F1", CultureInfo.InvariantCulture) + " ms");
+                                sumPcTicks = 0; maxPcTicks = 0; pcFrames = 0;
+                                pcReportTimer.Restart();
+                            }
+                        }
+                    }
 
                     // FPS counter (only runs when the checkbox is ticked)
                     if (!settings.ShowFps) continue;

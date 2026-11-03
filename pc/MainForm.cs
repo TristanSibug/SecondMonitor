@@ -79,6 +79,7 @@ class MainForm : Form
 
     // true when the program is really being closed (Exit in the tray menu)
     bool exitRequested = false;
+    Microsoft.Win32.SessionEndingEventHandler sessionEndingHandler; // told when Windows shuts down / logs off
 
     // The encoder choices. Both lists are in the SAME order:
     // item 0 of the names goes with item 0 of the codes, and so on.
@@ -141,6 +142,14 @@ class MainForm : Form
         engine.Stats += delegate (string message) { RunOnUi(delegate { statsLabel.Text = message; }); };
 
         FormClosing += OnFormClosing;
+
+        // Windows tells us BEFORE it shuts down or logs off. React at once: stop using adb
+        // (Windows cannot start programs any more) and tell the tablet app to close itself.
+        sessionEndingHandler = delegate (object sender, Microsoft.Win32.SessionEndingEventArgs args)
+        {
+            engine.PrepareForShutdown();
+        };
+        Microsoft.Win32.SystemEvents.SessionEnding += sessionEndingHandler;
 
         // Make sure the window's handle exists even if the window stays hidden,
         // otherwise the messages above could not reach the log.
@@ -322,11 +331,34 @@ class MainForm : Form
         menu.Items.Add("Exit", null, delegate { exitRequested = true; Close(); });
 
         trayIcon = new NotifyIcon();
-        trayIcon.Icon = SystemIcons.Application; // a plain built-in icon
+        trayIcon.Icon = LoadAppIcon(SystemInformation.SmallIconSize); // your icon.ico (or a plain icon if there is none)
+        Icon = LoadAppIcon(SystemInformation.SmallIconSize);        // the same icon in the window's title bar
         trayIcon.Text = "Second Monitor";
         trayIcon.ContextMenuStrip = menu;
         trayIcon.DoubleClick += delegate { ShowFromTray(); };
         trayIcon.Visible = true;
+    }
+
+    // ==================================================================
+    // LoadAppIcon: loads "icon.ico" (it is put inside the program when you build it).
+    // If there is no icon.ico, a plain built-in icon is used instead.
+    // 'size' picks the best-fitting picture inside the .ico file, so the icon stays sharp.
+    // ==================================================================
+    static Icon LoadAppIcon(Size size)
+    {
+        try
+        {
+            using (System.IO.Stream stream =
+                typeof(MainForm).Assembly.GetManifestResourceStream("icon.ico"))
+            {
+                if (stream != null) return new Icon(stream, size);
+            }
+        }
+        catch
+        {
+            // Broken icon file: fall through to the plain icon.
+        }
+        return SystemIcons.Application;
     }
 
     // Brings the window back from the tray
@@ -741,6 +773,9 @@ class MainForm : Form
 
     void OnStopClicked(object sender, EventArgs e)
     {
+        // Optionally tell the tablet app to close itself first (works without adb)
+        if (closeTabletCheck.Checked) engine.SayGoodbye();
+
         engine.Stop();
         SetRunning(false);
 
@@ -791,8 +826,26 @@ class MainForm : Form
             ReadControlsIntoSettings();
             settings.Save();
         }
+        // Windows shutting down / logging off: no adb is possible any more, so only say goodbye
+        // through the video connection. (Normally this was already done by SessionEnding.)
+        bool windowsIsEnding = (e.CloseReason == CloseReason.WindowsShutDown);
+        if (windowsIsEnding)
+        {
+            engine.PrepareForShutdown();
+        }
+        else if (closeTabletCheck.Checked)
+        {
+            engine.SayGoodbye();
+        }
+
         engine.Stop();
-        if (closeTabletCheck.Checked) engine.CloseTabletApp(); // do it now: the program is about to exit
+
+        if (!windowsIsEnding && closeTabletCheck.Checked)
+        {
+            engine.CloseTabletApp(); // do it now: the program is about to exit
+        }
+
+        Microsoft.Win32.SystemEvents.SessionEnding -= sessionEndingHandler;
 
         trayIcon.Visible = false;
         trayIcon.Dispose();

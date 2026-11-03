@@ -14,4 +14,14 @@
     <AssemblyName>SecondMonitor</AssemblyName>
   </PropertyGroup>
 
+  <!-- YOUR ICON: put a file called icon.ico in this folder (next to this project file).
+       If it exists, it becomes the icon of SecondMonitor.exe, the window and the tray icon.
+       If it does not exist, the build still works and a plain icon is used. -->
+  <PropertyGroup Condition="Exists('icon.ico')">
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('icon.ico')">
+    <EmbeddedResource Include="icon.ico" LogicalName="icon.ico" />
+  </ItemGroup>
+
 </Project>
