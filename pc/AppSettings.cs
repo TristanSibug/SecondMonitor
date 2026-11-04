@@ -3,7 +3,7 @@
 //
 // This class just HOLDS every option you can choose in the window, and it
 // remembers them between runs by saving them into a small text file called
-// "settings.txt" (it is saved next to the program).
+// "settings.txt" (saved in your user folder: AppData\Roaming\SecondMonitor).
 //
 // The file looks like this, one option per line:
 //     Encoder=libx264
@@ -39,7 +39,18 @@ class AppSettings
     // ------------------------------------------------------------------
     // Where the settings file lives
     // ------------------------------------------------------------------
+    // The settings are kept in your own user folder (C:\Users\<you>\AppData\Roaming\SecondMonitor),
+    // because the program itself may live in "Program Files", where normal programs may not write.
     static string FilePath()
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "SecondMonitor", "settings.txt");
+    }
+
+    // Older versions saved settings.txt right next to the program. We still read that one
+    // (only if there is no settings file in the new place yet), so nobody loses their choices.
+    static string OldFilePath()
     {
         return Path.Combine(AppContext.BaseDirectory, "settings.txt");
     }
@@ -54,9 +65,11 @@ class AppSettings
 
         try
         {
-            if (!File.Exists(FilePath())) return s;
+            string path = FilePath();
+            if (!File.Exists(path)) path = OldFilePath(); // an older version's file
+            if (!File.Exists(path)) return s;
 
-            foreach (string line in File.ReadAllLines(FilePath()))
+            foreach (string line in File.ReadAllLines(path))
             {
                 // Each line is "name=value". Find the "=" sign and cut the line in two.
                 int equalsAt = line.IndexOf('=');
@@ -122,6 +135,7 @@ class AppSettings
                 "TouchScreenInput=" + TouchScreenInput,
                 "CloseTabletOnStop=" + CloseTabletOnStop
             };
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath())); // make the folder if it is not there yet
             File.WriteAllLines(FilePath(), lines);
         }
         catch

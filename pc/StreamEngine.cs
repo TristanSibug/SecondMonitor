@@ -695,7 +695,7 @@ class StreamEngine
         string arguments = BuildFfmpegArguments(width, height, gpuOutput);
         WriteLog("Starting: ffmpeg " + arguments);
 
-        ProcessStartInfo info = new ProcessStartInfo(FfmpegPath, arguments);
+        ProcessStartInfo info = new ProcessStartInfo(ToolFinder.Find(FfmpegPath), arguments);
         info.UseShellExecute = false;        // needed so we can connect to its input/output
         info.RedirectStandardInput = true;   // standard capture: we WRITE raw pictures into ffmpeg
         info.RedirectStandardOutput = true;  // we READ encoded H.264 video out of ffmpeg
@@ -874,6 +874,9 @@ class StreamEngine
     {
         // During Windows shutdown, starting a program fails with an error pop-up. So do not even try.
         if (shuttingDown) return null;
+
+        // Find the full path of ffmpeg / adb (also works right after the installer added them)
+        file = ToolFinder.Find(file);
 
         ProcessStartInfo info = new ProcessStartInfo(file, arguments);
         info.UseShellExecute = false;
