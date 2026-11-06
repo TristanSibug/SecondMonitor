@@ -193,7 +193,9 @@ class TouchInjector
     {
         lock (sync)
         {
-            if (ready && active.Count > 0)
+            // A failed update disables future input, but previously injected fingers
+            // still need a best-effort release before falling back to the mouse.
+            if (active.Count > 0)
             {
                 Inject(-1, POINTER_FLAG_UP); // -1 = "every finger gets the 'lifted' flag"
             }
