@@ -56,7 +56,6 @@ class MainForm : Form
     Button checkSetupButton;
     Button startButton;
     Button stopButton;
-    Button adbButton;             // button: run "adb reverse" again
     Button openTabletButton;      // button: open the app on the tablet now
     Button closeTabletButton;     // button: close the app on the tablet now
     Label statusLabel;
@@ -281,21 +280,15 @@ class MainForm : Form
         stopButton.Click += OnStopClicked;
         Controls.Add(stopButton);
 
-        adbButton = new Button();
-        adbButton.Text = "Fix USB (adb)";
-        adbButton.SetBounds(212, 430, 104, 32);
-        adbButton.Click += OnAdbClicked;
-        Controls.Add(adbButton);
-
         openTabletButton = new Button();
         openTabletButton.Text = "Open tablet app";
-        openTabletButton.SetBounds(322, 430, 108, 32);
+        openTabletButton.SetBounds(212, 430, 160, 32);
         openTabletButton.Click += OnOpenTabletClicked;
         Controls.Add(openTabletButton);
 
         closeTabletButton = new Button();
         closeTabletButton.Text = "Close tablet app";
-        closeTabletButton.SetBounds(436, 430, 108, 32);
+        closeTabletButton.SetBounds(384, 430, 160, 32);
         closeTabletButton.Click += OnCloseTabletClicked;
         Controls.Add(closeTabletButton);
 
@@ -842,14 +835,6 @@ class MainForm : Form
         }
         catch (Exception ex) { if (!IsDisposed) AppendLog("Stop failed: " + ex.Message); }
         finally { if (!IsDisposed) SetRunning(false); }
-    }
-
-    void OnAdbClicked(object sender, EventArgs e)
-    {
-        // "adb" can take a few seconds, so run it on another thread to keep the window responsive
-        Thread worker = new Thread(delegate () { engine.RunAdbReverse(); });
-        worker.IsBackground = true;
-        worker.Start();
     }
 
     void OnOpenTabletClicked(object sender, EventArgs e)

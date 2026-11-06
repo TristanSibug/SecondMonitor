@@ -286,7 +286,6 @@ sealed class FakeSession(string serial) : IStreamSession
     public void SayGoodbye() { }
     public void PrepareForShutdown() { }
     public void DisplayChanged() => DisplayChanges++;
-    public bool RunAdbReverse() => true;
     public bool OpenTabletApp() => true;
     public void CloseTabletApp() => ClosedTablet = true;
 }

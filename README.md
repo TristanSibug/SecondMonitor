@@ -122,8 +122,7 @@ On the tablet:
 
 Your choices are saved in `%APPDATA%\SecondMonitor\settings.txt`.
 Settings from older versions beside the executable are still read when migrating.
-If something goes wrong with the cable, press **Fix USB (adb)**. **Open tablet app** and
-**Close tablet app** open and close the app on the tablet by hand.
+**Open tablet app** and **Close tablet app** open and close the app on the tablet by hand.
 
 Press **Check setup** before streaming to check ffmpeg, the selected encoder, adb authorization,
 the selected monitor, and whether the tablet app is installed. Results appear in the log.

@@ -19,7 +19,6 @@ interface IStreamSession
     void SayGoodbye();
     void PrepareForShutdown();
     void DisplayChanged();
-    bool RunAdbReverse();
     bool OpenTabletApp();
     void CloseTabletApp();
 }

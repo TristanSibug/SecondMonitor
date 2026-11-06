@@ -50,7 +50,6 @@ sealed class StreamEngine
         manual.Log += message => Log?.Invoke(message);
         return manual;
     }
-    public void RunAdbReverse() { ManualSession().RunAdbReverse(); }
     public void OpenTabletApp() { ManualSession().OpenTabletApp(); }
     public void CloseTabletApp() { ManualSession().CloseTabletApp(); }
     public void CheckSetup(AppSettings settings, bool monitorAvailable)

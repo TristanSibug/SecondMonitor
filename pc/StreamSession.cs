@@ -265,9 +265,9 @@ class StreamSession : IStreamSession
 
     // ==================================================================
     // RunAdbReverse: runs "adb reverse tcp:7777 tcp:7777"
-    // (public so the window's button can run it again after re-plugging the cable)
+    // Called by automatic USB recovery, including after re-plugging the cable.
     // ==================================================================
-    public bool RunAdbReverse()
+    bool RunAdbReverse()
     {
         CommandResult result = RunCommand("adb", AdbPrefix() + "reverse tcp:" + Port + " tcp:" + Port, 8000);
         if (result.Cancelled) return false;
