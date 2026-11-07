@@ -3,8 +3,8 @@ bin/
 obj/
 
 # ---- the folder build-exe.bat creates (upload SecondMonitor.exe to GitHub Releases instead) ----
-app/
-app-single/
+/app/
+/app-single/
 
 # ---- your personal settings (created next to the program when you run it) ----
 settings.txt
