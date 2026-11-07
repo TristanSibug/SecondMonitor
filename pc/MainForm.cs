@@ -19,6 +19,7 @@
 using System;
 using System.Drawing;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32; // Registry (used for "Run when Windows starts")
 
@@ -27,7 +28,7 @@ class MainForm : Form
     // ------------------------------------------------------------------
     // The engine that does the real work, and the options being used
     // ------------------------------------------------------------------
-    StreamEngine engine = new StreamEngine();
+    StreamEngine engine = new StreamEngine(serial => new StreamSession(serial));
     AppSettings settings;
 
     // ------------------------------------------------------------------
@@ -52,9 +53,9 @@ class MainForm : Form
     CheckBox closeToTrayCheck;    // tick box: closing the window keeps it running in the tray
     Button refreshButton;         // button: refresh the monitor list
     Button applyResButton;        // button: apply the chosen resolution now
+    Button checkSetupButton;
     Button startButton;
     Button stopButton;
-    Button adbButton;             // button: run "adb reverse" again
     Button openTabletButton;      // button: open the app on the tablet now
     Button closeTabletButton;     // button: close the app on the tablet now
     Label statusLabel;
@@ -69,6 +70,7 @@ class MainForm : Form
 
     // true while the engine is streaming (the option controls are locked then)
     bool isRunningNow = false;
+    bool checkingSetup = false;
 
     // true while we are refilling the lists ourselves, so the "selection changed"
     // handlers do not react to our own changes
@@ -81,6 +83,7 @@ class MainForm : Form
     bool exitRequested = false;
     volatile bool showRequested = false;   // set when a second copy of the program asks us to show the window
     System.Windows.Forms.Timer showTimer;  // checks that flag a few times a second
+    EventHandler displayChangedHandler;
     Microsoft.Win32.SessionEndingEventHandler sessionEndingHandler; // told when Windows shuts down / logs off
 
     // The encoder choices. Both lists are in the SAME order:
@@ -144,6 +147,8 @@ class MainForm : Form
         engine.Stats += delegate (string message) { RunOnUi(delegate { statsLabel.Text = message; }); };
 
         FormClosing += OnFormClosing;
+        displayChangedHandler = delegate { RunOnUi(delegate { engine.DisplayChanged(); }); };
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged += displayChangedHandler;
 
         // Windows tells us BEFORE it shuts down or logs off. React at once: stop using adb
         // (Windows cannot start programs any more) and tell the tablet app to close itself.
@@ -257,6 +262,12 @@ class MainForm : Form
         closeToTrayCheck = AddCheck("Keep running in tray when closed", 282, 342);
         touchCheck = AddCheck("Real touchscreen input (swipe)", 282, 368);
 
+        checkSetupButton = new Button();
+        checkSetupButton.Text = "Check setup";
+        checkSetupButton.SetBounds(282, 394, 130, 26);
+        checkSetupButton.Click += OnCheckSetupClicked;
+        Controls.Add(checkSetupButton);
+
         startButton = new Button();
         startButton.Text = "Start";
         startButton.SetBounds(16, 430, 92, 32);
@@ -269,21 +280,15 @@ class MainForm : Form
         stopButton.Click += OnStopClicked;
         Controls.Add(stopButton);
 
-        adbButton = new Button();
-        adbButton.Text = "Fix USB (adb)";
-        adbButton.SetBounds(212, 430, 104, 32);
-        adbButton.Click += OnAdbClicked;
-        Controls.Add(adbButton);
-
         openTabletButton = new Button();
         openTabletButton.Text = "Open tablet app";
-        openTabletButton.SetBounds(322, 430, 108, 32);
+        openTabletButton.SetBounds(212, 430, 160, 32);
         openTabletButton.Click += OnOpenTabletClicked;
         Controls.Add(openTabletButton);
 
         closeTabletButton = new Button();
         closeTabletButton.Text = "Close tablet app";
-        closeTabletButton.SetBounds(436, 430, 108, 32);
+        closeTabletButton.SetBounds(384, 430, 160, 32);
         closeTabletButton.Click += OnCloseTabletClicked;
         Controls.Add(closeTabletButton);
 
@@ -716,6 +721,7 @@ class MainForm : Form
     void SetRunning(bool isRunning)
     {
         isRunningNow = isRunning;
+        checkSetupButton.Enabled = !isRunning && !checkingSetup;
 
         monitorBox.Enabled = !isRunning;
         refreshButton.Enabled = !isRunning;
@@ -782,41 +788,53 @@ class MainForm : Form
             AppendLog("Note: you picked your MAIN screen, so the tablet will just mirror it.");
         }
 
-        bool started = engine.Start(settings, chosen);
+        bool started = engine.Start(settings, new MonitorTarget(chosen.DeviceName, chosen.Bounds));
         SetRunning(started);
     }
 
     // ==================================================================
     // Button handlers
     // ==================================================================
+    void OnCheckSetupClicked(object sender, EventArgs e)
+    {
+        ReadControlsIntoSettings();
+        AppSettings snapshot = settings.Copy();
+        bool available = false;
+        foreach (Screen screen in Screen.AllScreens)
+            if (screen.DeviceName == snapshot.MonitorName) available = true;
+        checkingSetup = true;
+        checkSetupButton.Enabled = false;
+        Thread worker = new Thread(delegate ()
+        {
+            try { engine.CheckSetup(snapshot, available); }
+            catch (Exception ex) { RunOnUi(delegate { AppendLog("Setup check failed: " + ex.Message); }); }
+            finally { RunOnUi(delegate { checkingSetup = false; checkSetupButton.Enabled = !isRunningNow; }); }
+        });
+        worker.IsBackground = true;
+        worker.Start();
+    }
+
     void OnStartClicked(object sender, EventArgs e)
     {
         TryStart(true);
     }
 
-    void OnStopClicked(object sender, EventArgs e)
+    async void OnStopClicked(object sender, EventArgs e)
     {
-        // Optionally tell the tablet app to close itself first (works without adb)
-        if (closeTabletCheck.Checked) engine.SayGoodbye();
-
-        engine.Stop();
-        SetRunning(false);
-
-        // Optionally close the app on the tablet too (adb can be slow, so use another thread)
-        if (closeTabletCheck.Checked)
+        bool closeTablet = closeTabletCheck.Checked;
+        stopButton.Enabled = false;
+        statusLabel.Text = "Status: Stopping...";
+        try
         {
-            Thread worker = new Thread(delegate () { engine.CloseTabletApp(); });
-            worker.IsBackground = true;
-            worker.Start();
+            await Task.Run(delegate
+            {
+                if (closeTablet) engine.SayGoodbye();
+                engine.Stop();
+                if (closeTablet) engine.CloseTabletApp();
+            });
         }
-    }
-
-    void OnAdbClicked(object sender, EventArgs e)
-    {
-        // "adb" can take a few seconds, so run it on another thread to keep the window responsive
-        Thread worker = new Thread(delegate () { engine.RunAdbReverse(); });
-        worker.IsBackground = true;
-        worker.Start();
+        catch (Exception ex) { if (!IsDisposed) AppendLog("Stop failed: " + ex.Message); }
+        finally { if (!IsDisposed) SetRunning(false); }
     }
 
     void OnOpenTabletClicked(object sender, EventArgs e)
@@ -869,6 +887,9 @@ class MainForm : Form
         }
 
         Microsoft.Win32.SystemEvents.SessionEnding -= sessionEndingHandler;
+        Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= displayChangedHandler;
+        showTimer.Stop();
+        showTimer.Dispose();
 
         trayIcon.Visible = false;
         trayIcon.Dispose();

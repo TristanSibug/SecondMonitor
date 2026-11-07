@@ -21,7 +21,7 @@
 ; ============================================================================
 
 #define MyAppName "Second Monitor"
-#define MyAppVersion "1.2.1"
+#define MyAppVersion "1.4.0"
 #define MyAppExe "SecondMonitor.exe"
 
 [Setup]

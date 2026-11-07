@@ -15,6 +15,9 @@ using System.IO;
 
 class AppSettings
 {
+    // Runs keep their own settings snapshot, even if the window is edited later.
+    public AppSettings Copy() { return (AppSettings)MemberwiseClone(); }
+
     // ------------------------------------------------------------------
     // The options, with the values they start with the very first time.
     // ------------------------------------------------------------------
