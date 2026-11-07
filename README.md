@@ -120,9 +120,17 @@ On the tablet:
    it sets up the USB tunnel (`adb reverse`) and opens the app on the tablet by itself.
 4. Drag windows onto the extended display.
 
-Your choices are saved in `settings.txt` next to the program.
-If something goes wrong with the cable, press **Fix USB (adb)**. **Open tablet app** and
-**Close tablet app** open and close the app on the tablet by hand.
+Your choices are saved in `%APPDATA%\SecondMonitor\settings.txt`.
+Settings from older versions beside the executable are still read when migrating.
+**Open tablet app** and **Close tablet app** open and close the app on the tablet by hand.
+
+Press **Check setup** before streaming to check ffmpeg, the selected encoder, adb authorization,
+the selected monitor, and whether the tablet app is installed. Results appear in the log.
+If USB setup fails, the program retries automatically with a short, increasing delay;
+you do not need to unplug the tablet just to retry.
+
+If the selected monitor is moved or resized while streaming, the program reconnects using
+its new dimensions. If that monitor disappears, it waits for it to return.
 
 ### Automatic start
 
@@ -176,6 +184,9 @@ Neither contains .NET, so they are small but need the .NET 10 Desktop Runtime on
 `com.example.secondmonitor`) and use **Build > Generate App Bundles or APKs > Build APK(s)**.
 
 ## Known limitations
+
+Development checks and a Windows/tablet validation checklist are documented in
+[docs/validation.md](docs/validation.md).
 
 - Programs that don't support touch only react to taps, not swipes. Windows that run as administrator ignore touch unless `SecondMonitor.exe` also runs as administrator.
 - The tablet app and `SecondMonitor.exe` must be updated together: a new app with an old exe sends no usable touch.
