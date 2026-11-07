@@ -60,7 +60,7 @@ touchscreen.
 
 ## Features
 
-- Wired, low-delay streaming (about 110-170 ms at 1280x800, 60 fps in testing)
+- Wired, low-delay streaming (about 60-110 ms at 1280x800, 60 fps in testing)
 - Works on old tablets: the tablet app supports **Android 5.0+** and uses the hardware decoder
 - Real touchscreen input: Windows sees genuine touches, so swiping scrolls lists and pinching zooms.
   Can be switched to plain mouse mode (single finger = left click and drag)
@@ -83,7 +83,6 @@ Only one setup so far: a **Samsung Galaxy Tab S 10.5 LTE (Android 5.0.2)**, a Wi
 | CPU encoder (libx264) + Standard capture | Tested, the compatibility fallback |
 | AMD hardware encoder | Works, but had a noticeably higher delay than the CPU encoder |
 | Intel and NVIDIA encoders | Untested |
-| Automatic start / tray / auto-open tablet app | Newer, lightly tested |
 | Real touchscreen input (swipe to scroll) | Works in testing. Untick it to fall back to mouse mode |
 
 Reports and fixes for other hardware are very welcome.
@@ -135,11 +134,8 @@ its new dimensions. If that monitor disappears, it waits for it to return.
 
 ### Recommended settings
 
-For the tested RX 570 and Galaxy Tab S setup, start with:
-
 - **Screen capture:** GPU capture
 - **Video encoder:** CPU - libx264
-- **Resolution:** 1280x800
 - **Frame rate:** 60 FPS
 - **Bitrate:** 8000 kbit/s
 
