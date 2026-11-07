@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The manifest is the app's "ID card". It tells Android:
+  the app's name, which screen to open first, and what permissions it needs.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.secondmonitor">
+
+    <!-- We use a network socket (even though it goes through USB), so we need this -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Second Monitor"
+        android:theme="@android:style/Theme.Holo.NoActionBar.Fullscreen">
+
+        <!-- landscape = always sideways, like a real monitor.
+             configChanges = don't restart the app when the tablet is rotated. -->
+        <activity
+            android:name=".MainActivity"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="true">
+            <intent-filter>
+                <!-- "This is the screen to open when you tap the app icon" -->
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
