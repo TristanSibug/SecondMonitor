@@ -123,8 +123,7 @@ or a dependency installation fails, Setup lists what needs to be installed manua
 ### Portable / manual installation
 
 1. Install the PC dependencies listed under [What you need](#what-you-need).
-2. Download the portable PC build and `SecondMonitor.apk` from [Releases](../../releases).
-   Keep all files in a folder-style PC build together; a single-file build needs only its executable.
+2. Download `SecondMonitor.exe` and `SecondMonitor.apk` from [Releases](../../releases).
 3. Install the APK on the tablet, allowing installs from unknown sources if needed.
 4. Connect the USB cable and accept the USB debugging prompt. `adb devices` should list the tablet as `device`.
 
@@ -217,10 +216,9 @@ Neither contains .NET, so they are small but need the .NET 10 Desktop Runtime on
 **Windows setup executable** (Inno Setup 7, 64-bit edition recommended):
 
 1. Run `build-exe.bat` to build the PC app into `app\`.
-2. Copy the existing tablet APK to `installer\SecondMonitor.apk`. The Android app has not changed.
+2. Copy the existing tablet APK to `installer\SecondMonitor.apk`.
 3. Install [Inno Setup 7](https://jrsoftware.org/isinfo.php), then run `build-installer.bat`.
-4. The result is `installer\output\SecondMonitorSetup-1.4.0.exe`. Attach it to the v1.4.0 GitHub release
-   as the recommended download for most users.
+4. The result is `installer\output\SecondMonitorSetup-1.4.0.exe`.
 
 The build script searches the standard Inno Setup 7 installation folders and PATH.
 For a custom or portable compiler location, set `ISCC` to the full path of `ISCC.exe` first.
