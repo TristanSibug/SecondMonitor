@@ -76,6 +76,12 @@ touchscreen.
 
 On the PC:
 - **Windows 10 or 11, 64-bit**
+- **Administrator permission** to install the PC app and virtual display driver
+- **Internet access** for installing missing dependencies through winget (Windows App Installer)
+
+The recommended setup executable offers to install the dependencies below automatically.
+For a portable/manual installation, install them yourself:
+
 - **.NET 10 Desktop Runtime** (the .NET 10 SDK includes it) - [link](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 - **ffmpeg**, a recent [build](https://github.com/ffmpeg/ffmpeg) (6.0 or newer for GPU capture).
   Put `ffmpeg exe` next to `SecondMonitor.exe` or in your PATH
@@ -88,18 +94,44 @@ On the PC:
 
 On the tablet:
 - **USB debugging** turned on (Settings > About > tap Build number 7 times, then Developer options)
-- Permission to install the APK (allow installs from unknown sources)
+- Accept the PC's **Allow USB debugging?** prompt when connected
+- For manual APK installation only: allow installs from unknown sources
 
 ## Install
 
-1. Download `SecondMonitor.apk` and `SecondMonitor.exe` from the [Releases](../../releases) page.
-2. Install the APK on the tablet.
-3. Plug the tablet into the PC with a USB cable and tap **Allow** on the "Allow USB debugging?"
-   prompt (tick "Always allow"). `adb devices` should list it as `device`.
+### Recommended: setup executable
+
+Use **`SecondMonitorSetup-<version>.exe`** from the [Releases](../../releases) page
+(`SecondMonitorSetup-1.5.0.exe` for v1.5.0). This is the all-in-one Windows installer
+for most users: it includes the PC app, the existing tablet APK, and a USB installation helper.
+You do not need to download the APK separately when using the installer.
+
+1. Run the setup executable and approve the Windows administrator prompt.
+2. Keep **Install missing required programs with winget** selected. Setup checks for
+   .NET 10 Desktop Runtime, ffmpeg, adb, and the Virtual Display Driver, and offers to install
+   what is missing. Follow any driver prompts and restart Windows if requested.
+3. Connect the tablet with a USB data cable, enable USB debugging, and tap **Allow** on
+   the tablet's **Allow USB debugging?** prompt (tick **Always allow**).
+4. On Setup's final page, select **Install tablet app over USB** if the tablet is ready.
+   You can also run **Install tablet app (USB)** from the Windows Start menu later.
+5. Open **Second Monitor** from the Windows Start menu or the optional desktop shortcut.
+
+Setup handles the PC files and can install the tablet APK over USB, but enabling USB debugging
+and accepting the tablet's authorization prompt still require your input. If winget is unavailable
+or a dependency installation fails, Setup lists what needs to be installed manually.
+
+### Portable / manual installation
+
+1. Install the PC dependencies listed under [What you need](#what-you-need).
+2. Download the portable PC build and `SecondMonitor.apk` from [Releases](../../releases).
+   Keep all files in a folder-style PC build together; a single-file build needs only its executable.
+3. Install the APK on the tablet, allowing installs from unknown sources if needed.
+4. Connect the USB cable and accept the USB debugging prompt. `adb devices` should list the tablet as `device`.
 
 ## Use
 
-1. Open `SecondMonitor.exe`.
+1. Open **Second Monitor** from the Windows Start menu (setup installation), or run
+   `SecondMonitor.exe` from your portable folder.
 2. Pick the virtual monitor (not your main screen), an encoder and your other options.
 3. Press **Start**. While it runs, the program watches for the tablet. When the tablet is plugged in,
    it sets up the USB tunnel (`adb reverse`) and opens the app on the tablet by itself.
@@ -181,6 +213,19 @@ build-single-file.bat   builds ONE exe; needs an internet connection for NuGet
 `build-exe.bat` creates `app\SecondMonitor.exe` plus a few small files next to it (keep them
 together, for example in a zip). `build-single-file.bat` creates one `app-single\SecondMonitor.exe`.
 Neither contains .NET, so they are small but need the .NET 10 Desktop Runtime on the PC.
+
+**Windows setup executable** (Inno Setup 7, 64-bit edition recommended):
+
+1. Run `build-exe.bat` to build the PC app into `app\`.
+2. Copy the existing tablet APK to `installer\SecondMonitor.apk`. The Android app has not changed.
+3. Install [Inno Setup 7](https://jrsoftware.org/isinfo.php), then run `build-installer.bat`.
+4. The result is `installer\output\SecondMonitorSetup-1.5.0.exe`. Attach it to the v1.5.0 GitHub release
+   as the recommended download for most users.
+
+The build script searches the standard Inno Setup 7 installation folders and PATH.
+For a custom or portable compiler location, set `ISCC` to the full path of `ISCC.exe` first.
+The installer script requires Inno Setup 7 or newer and builds a native x64 setup executable.
+End users do not need Inno Setup installed.
 
 **Tablet app:** open the Android project in Android Studio (Java, minSdk 21, package
 `com.example.secondmonitor`) and use **Build > Generate App Bundles or APKs > Build APK(s)**.

@@ -12,7 +12,7 @@
     <Nullable>disable</Nullable>
     <!-- The program file will be called SecondMonitor.exe -->
     <AssemblyName>SecondMonitor</AssemblyName>
-    <Version>1.4.0</Version>
+    <Version>1.5.0</Version>
   </PropertyGroup>
 
   <!-- YOUR ICON: put a file called icon.ico in this folder (next to this project file).

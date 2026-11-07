@@ -14,14 +14,18 @@
 ;   - adds an uninstaller (this does not remove the programs above, other things may use them)
 ;
 ; To build it you need:
-;   1. Inno Setup 6.3 or newer (free): https://jrsoftware.org/isinfo.php
+;   1. Inno Setup 7 (64-bit edition recommended): https://jrsoftware.org/isinfo.php
 ;   2. ..\app\SecondMonitor.exe   (run build-exe.bat first)
 ;   3. installer\SecondMonitor.apk (your tablet app, renamed to SecondMonitor.apk)
 ;   Then run build-installer.bat (or open this file in Inno Setup and press Compile).
 ; ============================================================================
 
+#if Ver < EncodeVer(7, 0, 0)
+  #error This installer requires Inno Setup 7 or newer.
+#endif
+
 #define MyAppName "Second Monitor"
-#define MyAppVersion "1.4.0"
+#define MyAppVersion "1.5.0"
 #define MyAppExe "SecondMonitor.exe"
 
 [Setup]
@@ -34,8 +38,11 @@ DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
 ; Program Files and the driver need administrator rights
 PrivilegesRequired=admin
+; Inno Setup 7 can build a native x64 setup executable for our win-x64 app.
+SetupArchitecture=x64
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0
 OutputDir=output
 OutputBaseFilename=SecondMonitorSetup-{#MyAppVersion}
 SetupIconFile=..\pc\icon.ico
@@ -69,6 +76,9 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: deskto
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "SecondMonitor"; Flags: uninsdeletevalue
 
 [Run]
+; Optional on the final page: the tablet must already allow USB debugging.
+; Keep this synchronous so the helper finishes before the PC app is launched.
+Filename: "{cmd}"; Parameters: "/D /C """"{app}\install-tablet-app.bat"""""; Description: "Install tablet app over USB (connect and authorize the tablet first)"; Flags: postinstall skipifsilent runasoriginaluser unchecked
 Filename: "{app}\{#MyAppExe}"; Description: "Start {#MyAppName}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 ; ============================================================================
