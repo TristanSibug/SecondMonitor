@@ -67,7 +67,8 @@ touchscreen.
 - Open and close the tablet app from the PC, by a button or automatically
 - A settings window: pick the monitor, resolution, encoder and frame rate. No command line
 - Encoder choices: **CPU (libx264)**, AMD (AMF), Intel (QSV), NVIDIA (NVENC)
-- Screen capture choices: **Standard** or **GPU capture** (ffmpeg `ddagrab`, experimental)
+- Screen capture choices: **GPU capture** (ffmpeg `ddagrab`, recommended for the tested setup)
+  or **Standard** (compatibility fallback)
 - Optional automation: start with Windows, start streaming by itself, live in the system tray,
   and open the app on the tablet automatically when it is plugged in
 
@@ -78,8 +79,8 @@ Only one setup so far: a **Samsung Galaxy Tab S 10.5 LTE (Android 5.0.2)**, a Wi
 
 | Part | Status |
 |---|---|
-| CPU encoder (libx264) + Standard capture | Tested, the recommended setup |
-| GPU capture with the CPU encoder | Worked in testing, similar speed to Standard capture |
+| GPU capture with the CPU encoder (libx264) | Tested, the recommended setup for the hardware listed above |
+| CPU encoder (libx264) + Standard capture | Tested, the compatibility fallback |
 | AMD hardware encoder | Works, but had a noticeably higher delay than the CPU encoder |
 | Intel and NVIDIA encoders | Untested |
 | Automatic start / tray / auto-open tablet app | Newer, lightly tested |
@@ -132,6 +133,26 @@ you do not need to unplug the tablet just to retry.
 If the selected monitor is moved or resized while streaming, the program reconnects using
 its new dimensions. If that monitor disappears, it waits for it to return.
 
+### Recommended settings
+
+For the tested RX 570 and Galaxy Tab S setup, start with:
+
+- **Screen capture:** GPU capture
+- **Video encoder:** CPU - libx264
+- **Resolution:** 1280x800
+- **Frame rate:** 60 FPS
+- **Bitrate:** 8000 kbit/s
+
+GPU capture uses the graphics card to capture the screen and includes the actual mouse cursor.
+CPU/libx264 provides low-latency H.264 encoding. GPU capture and GPU encoding are separate
+options: you can capture with the GPU while encoding with the CPU.
+
+If GPU capture cannot find your monitor, produces a black screen, or fails to start,
+switch to **Standard capture**.
+
+Performance varies with the PC, graphics driver, and tablet. These settings are based on
+the setup tested by the author.
+
 ### Automatic start
 
 Tick these and everything runs by itself:
@@ -152,7 +173,7 @@ If the tablet's screen is locked, the app opens behind the lock screen; unlock t
 | Monitor | The virtual monitor to send to the tablet (not your main screen). Press Refresh after changing monitors. |
 | Monitor resolution | Changes the virtual monitor's resolution (Apply, or automatically on Start). It lists only modes the virtual display driver offers, up to 60 Hz. Never changes your main screen. |
 | Video encoder | **CPU (libx264)** works everywhere and had the lowest delay. **AMD / Intel / NVIDIA** use the graphics card, which takes load off the CPU but may add delay. |
-| Screen capture | **Standard** takes screenshots in the program (most compatible). **GPU capture** lets ffmpeg grab the screen with the graphics card. |
+| Screen capture | **GPU capture** is recommended for the tested setup and lets ffmpeg capture the screen with the graphics card. **Standard** takes screenshots in the program and is the compatibility fallback. |
 | Frames per second | 60 is smoothest. 30 uses about half the work. |
 | Bitrate | Video quality budget. 8000 kbit/s is plenty for 1280x800. |
 | CPU encoder threads | Limits how many CPU threads libx264 may use, so a game keeps the rest. 0 = no limit. |
