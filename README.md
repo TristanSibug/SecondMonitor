@@ -72,21 +72,6 @@ touchscreen.
 - Optional automation: start with Windows, start streaming by itself, live in the system tray,
   and open the app on the tablet automatically when it is plugged in
 
-## Tested on
-
-Only one setup so far: a **Samsung Galaxy Tab S 10.5 LTE (Android 5.0.2)**, a Windows PC running
-**AMD RX 570**, **Ryzen 5 5600**, and the Virtual Display Driver.
-
-| Part | Status |
-|---|---|
-| GPU capture with the CPU encoder (libx264) | Tested, the recommended setup for the hardware listed above |
-| CPU encoder (libx264) + Standard capture | Tested, the compatibility fallback |
-| AMD hardware encoder | Works, but had a noticeably higher delay than the CPU encoder |
-| Intel and NVIDIA encoders | Untested |
-| Real touchscreen input (swipe to scroll) | Works in testing. Untick it to fall back to mouse mode |
-
-Reports and fixes for other hardware are very welcome.
-
 ## What you need
 
 On the PC:
@@ -206,7 +191,7 @@ Development checks and a Windows/tablet validation checklist are documented in
 [docs/validation.md](docs/validation.md).
 
 - Programs that don't support touch only react to taps, not swipes. Windows that run as administrator ignore touch unless `SecondMonitor.exe` also runs as administrator.
-- The tablet app and `SecondMonitor.exe` must be updated together: a new app with an old exe sends no usable touch.
+- v1.4.0 updates only the PC program and works with the existing tablet APK. Releases that change the touch protocol may require matching PC and tablet versions.
 - Standard capture draws the cursor as a plain arrow. GPU capture draws the real cursor.
 - Windows only. The tablet needs a cable (USB debugging); there is no wireless mode.
 
@@ -219,6 +204,21 @@ Development checks and a Windows/tablet validation checklist are documented in
 - **Black tablet screen + `[ffmpeg]` errors in the log**: read the error. For a graphics-card encoder, try CPU (libx264). For GPU capture, try Standard.
 - **The resolution you want isn't in the list**: the virtual display driver doesn't offer it. Add it to the driver's settings file (`vdd_settings.xml` for Virtual Display Driver) and reload the driver (disable and enable the adapter in Device Manager).
 - **Touch lands in the wrong spot**: make sure you chose the virtual monitor.
+
+## Tested on
+
+Only one setup so far: a **Samsung Galaxy Tab S 10.5 LTE (Android 5.0.2)**, a Windows PC running
+**AMD RX 570**, **Ryzen 5 5600**, and the Virtual Display Driver.
+
+| Part | Status |
+|---|---|
+| GPU capture with the CPU encoder (libx264) | Tested, the recommended setup for the hardware listed above |
+| CPU encoder (libx264) + Standard capture | Tested, the compatibility fallback |
+| AMD hardware encoder | Works, but had a noticeably higher delay than the CPU encoder |
+| Intel and NVIDIA encoders | Untested |
+| Real touchscreen input (swipe to scroll) | Works in testing. Untick it to fall back to mouse mode |
+
+Reports and fixes for other hardware are very welcome.
 
 ## Credits
 
