@@ -102,7 +102,7 @@ On the tablet:
 ### Recommended: setup executable
 
 Use **`SecondMonitorSetup-<version>.exe`** from the [Releases](../../releases) page
-(`SecondMonitorSetup-1.4.0.exe` for v1.4.0). This is the all-in-one Windows installer
+(`SecondMonitorSetup-1.4.1.exe` for v1.4.1). This is the all-in-one Windows installer
 for most users: it includes the PC app, the existing tablet APK, and a USB installation helper.
 You do not need to download the APK separately when using the installer.
 
@@ -218,7 +218,7 @@ Neither contains .NET, so they are small but need the .NET 10 Desktop Runtime on
 1. Run `build-exe.bat` to build the PC app into `app\`.
 2. Copy the existing tablet APK to `installer\SecondMonitor.apk`.
 3. Install [Inno Setup 7](https://jrsoftware.org/isinfo.php), then run `build-installer.bat`.
-4. The result is `installer\output\SecondMonitorSetup-1.4.0.exe`.
+4. The result is `installer\output\SecondMonitorSetup-1.4.1.exe`.
 
 The build script searches the standard Inno Setup 7 installation folders and PATH.
 For a custom or portable compiler location, set `ISCC` to the full path of `ISCC.exe` first.
