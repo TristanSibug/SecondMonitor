@@ -851,10 +851,21 @@ class MainForm : Form
         worker.Start();
     }
 
+    protected override void WndProc(ref Message message)
+    {
+        // Latch shutdown before WinForms raises closing events. This also works
+        // while hidden in the tray and covers both shutdown and user logoff.
+        ShutdownGuard.ObserveWindowMessage(message.Msg, message.WParam);
+        base.WndProc(ref message);
+    }
+
     void OnFormClosing(object sender, FormClosingEventArgs e)
     {
+        bool windowsIsEnding = e.CloseReason == CloseReason.WindowsShutDown || ShutdownGuard.IsShuttingDown;
+        if (windowsIsEnding) engine.PrepareForShutdown();
+
         // The X button was pressed and "keep running in tray" is ticked: just hide the window
-        if (e.CloseReason == CloseReason.UserClosing && closeToTrayCheck.Checked && !exitRequested)
+        if (!windowsIsEnding && e.CloseReason == CloseReason.UserClosing && closeToTrayCheck.Checked && !exitRequested)
         {
             e.Cancel = true;
             Hide();
@@ -869,12 +880,7 @@ class MainForm : Form
         }
         // Windows shutting down / logging off: no adb is possible any more, so only say goodbye
         // through the video connection. (Normally this was already done by SessionEnding.)
-        bool windowsIsEnding = (e.CloseReason == CloseReason.WindowsShutDown);
-        if (windowsIsEnding)
-        {
-            engine.PrepareForShutdown();
-        }
-        else if (closeTabletCheck.Checked)
+        if (!windowsIsEnding && closeTabletCheck.Checked)
         {
             engine.SayGoodbye();
         }

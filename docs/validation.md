@@ -27,6 +27,12 @@ chunks. Integration tests encode and decode 30 frames with inline and global
 encoder headers, and verify that a single raw input frame is delivered without
 waiting for a second input frame or closing stdin.
 
+Shutdown regression tests also cover a queued launch that passed an earlier check,
+serialization of process creation with shutdown, Windows session-message handling,
+aborted shutdown, cancellation of a real running helper process, diagnostics stopping
+before adb, and the active session still receiving goodbye preparation. All helper
+launches share the same guard; diagnostics do not bypass it.
+
 ffmpeg writes AVI chunks only between its process and the PC app. This supplies
 explicit packet lengths instead of requiring the next frame's AUD to delimit the
 current one. The PC strips all AVI metadata before forwarding raw H.264. B frames
@@ -71,10 +77,16 @@ authorized USB-connected tablet running the existing APK.
 6. Repeat streaming and display changes with GPU capture and each available
    hardware encoder (AMD, Intel, NVIDIA). CPU-based automated tests cannot validate
    these device/driver-specific paths.
-7. Exit normally, close to tray, log off and shut down. Verify that no input stays
-   down and no adb is launched after shutdown starts.
+7. Exit normally, close to tray, log off and shut down. Repeat while streaming,
+   while USB recovery is retrying, and while **Check setup** is running. Verify that
+   no input stays down, no new adb command starts after the shutdown notification,
+   and no adb startup-error dialog blocks Windows. The tablet should receive goodbye
+   over the existing connection, or close after its existing 10-second disconnect
+   timeout if Windows terminates the adb tunnel first. No APK update is needed.
 
-Both Windows publish modes and all 16 regression/integration tests passed in the
+Both Windows publish modes and all 22 regression/integration tests passed in the
 Linux environment using .NET SDK 10.0.403 and ffmpeg 7.1.5. The Windows GUI,
-USB hardware, display changes and hardware encoders have not been runtime-tested
-there. Keep these distinct from the automated results before making a release.
+USB hardware, display changes, actual Windows shutdown/logoff messages, and hardware
+encoders have not been runtime-tested there. Session-message tests simulate the
+notification values, and the helper cancellation test uses a local test process.
+Keep these distinct from the automated results before making a release.

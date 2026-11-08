@@ -9,6 +9,7 @@
     <Compile Include="../pc/TouchMessage.cs" Link="TouchMessage.cs" />
     <Compile Include="../pc/UsbRecovery.cs" Link="UsbRecovery.cs" />
     <Compile Include="../pc/CommandRunner.cs" Link="CommandRunner.cs" />
+    <Compile Include="../pc/ShutdownGuard.cs" Link="ShutdownGuard.cs" />
     <Compile Include="../pc/AviFrameReader.cs" Link="AviFrameReader.cs" />
     <Compile Include="../pc/AppSettings.cs" Link="AppSettings.cs" />
     <Compile Include="../pc/SetupDiagnostics.cs" Link="SetupDiagnostics.cs" />

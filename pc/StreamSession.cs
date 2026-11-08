@@ -86,9 +86,7 @@ class StreamSession : IStreamSession
     volatile NetworkStream currentNet;    // the same connection as a stream (so we can say goodbye on it)
     readonly object netWriteLock = new object(); // only one thread may write to the tablet at a time
 
-    // True once Windows is shutting down (or the user is logging off). From then on we never start
-    // adb: Windows refuses to start new programs during shutdown and shows an "adb.exe" error.
-    static volatile bool shuttingDown = false;
+    int shutdownPrepared;                 // send goodbye at most once for this session
     volatile Process currentFfmpeg;       // the running ffmpeg (so Stop() can close it)
     volatile TcpListener currentListener; // the "door" waiting for the tablet (so Stop() can close it)
     volatile string deviceSerial;         // the plugged-in tablet's adb name (null = none known yet)
@@ -128,7 +126,7 @@ class StreamSession : IStreamSession
     // ==================================================================
     public bool Start(AppSettings newSettings, MonitorTarget screen)
     {
-        if (used) return false;
+        if (used || ShutdownGuard.IsShuttingDown) return false;
         used = true;
 
         settings = newSettings.Copy();
@@ -258,8 +256,8 @@ class StreamSession : IStreamSession
     // ==================================================================
     public void PrepareForShutdown()
     {
-        if (shuttingDown) return; // already done
-        shuttingDown = true;
+        ShutdownGuard.BeginShutdown();
+        if (Interlocked.Exchange(ref shutdownPrepared, 1) != 0) return;
         SayGoodbye();
     }
 
@@ -301,7 +299,7 @@ class StreamSession : IStreamSession
         string text = result.Success ? result.Output : null;
         if (text == null)
         {
-            if (shuttingDown) return; // Windows is shutting down: not an error worth reporting
+            if (ShutdownGuard.IsShuttingDown) return;
             if (!adbMissingLogged)
             {
                 WriteLog("Could not run adb. Is Android platform-tools in your PATH?");
@@ -342,11 +340,11 @@ class StreamSession : IStreamSession
         string lastState = null;
         UsbRecovery recovery = new UsbRecovery();
         Stopwatch clock = Stopwatch.StartNew();
-        while (running)
+        while (running && !ShutdownGuard.IsShuttingDown)
         {
             string serial, state;
             QueryDevice(out serial, out state);
-            if (!running) break;
+            if (!running || ShutdownGuard.IsShuttingDown) break;
             if (state == "device")
             {
                 if (serial != lastSerial) WriteLog("Tablet detected (" + serial + ").");
@@ -640,7 +638,9 @@ class StreamSession : IStreamSession
 
         try
         {
-            Process started = Process.Start(info);
+            Process started = null;
+            if (!ShutdownGuard.TryStart(() => started = Process.Start(info), stop.Token, out _))
+                throw new OperationCanceledException("Shutdown cancelled encoder startup.");
 
             // Make ffmpeg lower priority than your game too (it does the heavy encoding work)
             if (settings.LowerPriority)
@@ -806,7 +806,7 @@ class StreamSession : IStreamSession
     // ==================================================================
     CommandResult RunCommand(string file, string arguments, int timeoutMs)
     {
-        if (shuttingDown) return new CommandResult { Cancelled = true };
+        if (ShutdownGuard.IsShuttingDown) return new CommandResult { Cancelled = true };
         return CommandRunner.Run(ToolFinder.Find(file), arguments, timeoutMs, stop.Token);
     }
 

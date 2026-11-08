@@ -18,7 +18,7 @@ sealed class StreamEngine
     {
         lock (lifecycle)
         {
-            if (session != null) return false;
+            if (session != null || ShutdownGuard.IsShuttingDown) return false;
             IStreamSession next = createSession(null);
             next.Log += message => { if (ReferenceEquals(session, next)) Log?.Invoke(message); };
             next.Status += message => { if (ReferenceEquals(session, next)) Status?.Invoke(message); };
@@ -41,7 +41,11 @@ sealed class StreamEngine
         }
     }
     public void SayGoodbye() { session?.SayGoodbye(); }
-    public void PrepareForShutdown() { (session ?? createSession(null)).PrepareForShutdown(); }
+    public void PrepareForShutdown()
+    {
+        ShutdownGuard.BeginShutdown();
+        (session ?? createSession(null)).PrepareForShutdown();
+    }
     public void DisplayChanged() { session?.DisplayChanged(); }
 
     IStreamSession ManualSession()
@@ -50,8 +54,8 @@ sealed class StreamEngine
         manual.Log += message => Log?.Invoke(message);
         return manual;
     }
-    public void OpenTabletApp() { ManualSession().OpenTabletApp(); }
-    public void CloseTabletApp() { ManualSession().CloseTabletApp(); }
+    public void OpenTabletApp() { if (!ShutdownGuard.IsShuttingDown) ManualSession().OpenTabletApp(); }
+    public void CloseTabletApp() { if (!ShutdownGuard.IsShuttingDown) ManualSession().CloseTabletApp(); }
     public void CheckSetup(AppSettings settings, bool monitorAvailable)
     {
         SetupDiagnostics.Run(settings, monitorAvailable, message => Log?.Invoke(message));

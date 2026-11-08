@@ -6,10 +6,12 @@ static class SetupDiagnostics
     public static void Run(AppSettings settings, bool monitorAvailable, Action<string> log,
         Func<string, string, int, CommandResult> execute = null)
     {
+        if (ShutdownGuard.IsShuttingDown) return;
         execute ??= (file, arguments, timeout) => CommandRunner.Run(ToolFinder.Find(file), arguments, timeout);
         log("[setup] Checking prerequisites...");
         log(monitorAvailable ? "[setup] Selected monitor is available." : "[setup] Select an available monitor; press Refresh if needed.");
         CommandResult encoders = execute("ffmpeg", "-hide_banner -encoders", 8000);
+        if (encoders.Cancelled || ShutdownGuard.IsShuttingDown) return;
         if (!encoders.Success) log("[setup] Cannot run ffmpeg. Install it or put ffmpeg.exe beside SecondMonitor.exe. " + encoders.Output.Trim());
         else
         {
@@ -21,17 +23,20 @@ static class SetupDiagnostics
             CommandResult sample = execute("ffmpeg",
                 "-hide_banner -loglevel error -f lavfi -i color=size=128x96:rate=30 -frames:v 1 -an -c:v "
                 + settings.Encoder + " -bf 0 -pix_fmt " + (settings.Encoder == "h264_amf" ? "nv12" : "yuv420p") + " -f null -", 8000);
+            if (sample.Cancelled || ShutdownGuard.IsShuttingDown) return;
             log(sample.Success ? "[setup] Selected encoder successfully encoded a sample frame."
                 : "[setup] Selected encoder sample failed" + (sample.TimedOut ? " (timed out)" : "") + ": " + sample.Output.Trim() + " Try CPU/libx264.");
             if (settings.GpuCapture)
             {
                 CommandResult filters = execute("ffmpeg", "-hide_banner -filters", 8000);
+                if (filters.Cancelled || ShutdownGuard.IsShuttingDown) return;
                 log(filters.Success && Regex.IsMatch(filters.Output, @"\bddagrab\b")
                     ? "[setup] GPU capture filter is included; the selected display must also support it."
                     : "[setup] GPU capture filter is unavailable. Use Standard capture or update ffmpeg.");
             }
         }
         CommandResult devices = execute("adb", "devices", 8000);
+        if (devices.Cancelled || ShutdownGuard.IsShuttingDown) return;
         if (!devices.Success)
         {
             log("[setup] Cannot query adb devices" + (devices.TimedOut ? " (timed out)" : "") + ". Install Android platform-tools and check USB. " + devices.Output.Trim());
@@ -44,6 +49,7 @@ static class SetupDiagnostics
                 string serial = ready.Groups[1].Value;
                 log("[setup] Authorized tablet: " + serial);
                 CommandResult app = execute("adb", "-s \"" + serial.Replace("\"", "") + "\" shell pm path com.example.secondmonitor", 8000);
+                if (app.Cancelled || ShutdownGuard.IsShuttingDown) return;
                 log(app.Success && app.Output.Contains("package:")
                     ? "[setup] Tablet app is installed."
                     : "[setup] Could not verify the tablet app. Install SecondMonitor.apk on the tablet. " + app.Output.Trim());

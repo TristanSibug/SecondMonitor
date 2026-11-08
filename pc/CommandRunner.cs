@@ -19,7 +19,8 @@ static class CommandRunner
     public static CommandResult Run(string file, string arguments, int timeoutMs, CancellationToken cancellation = default)
     {
         CommandResult result = new CommandResult();
-        if (cancellation.IsCancellationRequested) { result.Cancelled = true; return result; }
+        if (cancellation.IsCancellationRequested || ShutdownGuard.IsShuttingDown)
+        { result.Cancelled = true; return result; }
         using (Process process = new Process())
         {
             process.StartInfo = new ProcessStartInfo(file, arguments)
@@ -27,7 +28,13 @@ static class CommandRunner
                 UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardOutput = true, RedirectStandardError = true
             };
-            try { process.Start(); result.Started = true; }
+            CancellationToken shutdown;
+            try
+            {
+                if (!ShutdownGuard.TryStart(() => process.Start(), cancellation, out shutdown))
+                { result.Cancelled = true; return result; }
+                result.Started = true;
+            }
             catch (Win32Exception ex) { result.Output = ex.Message; return result; }
 
             Task<string> stdout = process.StandardOutput.ReadToEndAsync();
@@ -35,13 +42,14 @@ static class CommandRunner
             Stopwatch timer = Stopwatch.StartNew();
             while (!process.WaitForExit(50))
             {
-                result.Cancelled = cancellation.IsCancellationRequested;
+                result.Cancelled = cancellation.IsCancellationRequested || shutdown.IsCancellationRequested;
                 result.TimedOut = timer.ElapsedMilliseconds >= timeoutMs;
                 if (!result.Cancelled && !result.TimedOut) continue;
                 try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { } catch (Win32Exception) { }
                 process.WaitForExit(1000);
                 break;
             }
+            result.Cancelled |= cancellation.IsCancellationRequested || shutdown.IsCancellationRequested;
             if (process.HasExited) result.ExitCode = process.ExitCode;
             // Descendants may inherit the pipes. Never wait indefinitely for those handles.
             try { Task.WaitAll(new Task[] { stdout, stderr }, 1000); } catch (AggregateException) { }

@@ -5,6 +5,12 @@ if (args.Length > 0 && args[0] == "--child")
 {
     if (args[1] == "fail") { Console.Error.Write("expected failure"); return 7; }
     if (args[1] == "wait") { Thread.Sleep(10000); return 0; }
+    if (args[1] == "ready-wait")
+    {
+        File.WriteAllText(args[2], "ready");
+        Thread.Sleep(10000);
+        return 0;
+    }
     if (args[1] == "output")
     {
         Console.Out.Write(new string('o', 128 * 1024));
@@ -206,6 +212,118 @@ Test("command runner bounds timeout and cancellation", () =>
     Check(CommandRunner.Run(self, childPrefix + "--child fail", 5000, cancel.Token).Cancelled, "cancelled command launched");
 });
 
+Test("shutdown blocks a queued launch after its caller passed an earlier check", () =>
+{
+    var gate = new ProcessLaunchGate();
+    using var checkedEarlier = new ManualResetEventSlim();
+    using var continueLaunch = new ManualResetEventSlim();
+    int started = 0;
+    var queued = Task.Run(() =>
+    {
+        bool wasEnding = gate.IsShuttingDown;
+        checkedEarlier.Set();
+        continueLaunch.Wait(3000);
+        return !wasEnding && gate.TryStart(() => started++, default, out _);
+    });
+    try
+    {
+        Check(checkedEarlier.Wait(2000), "caller never reached pre-launch check");
+        gate.BeginShutdown();
+    }
+    finally { continueLaunch.Set(); }
+    Check(queued.Wait(2000) && !queued.Result && started == 0, "queued process started during shutdown");
+});
+Test("launch gate serializes shutdown with process creation", () =>
+{
+    var gate = new ProcessLaunchGate();
+    using var creating = new ManualResetEventSlim();
+    using var finishCreation = new ManualResetEventSlim();
+    using var ending = new ManualResetEventSlim();
+    CancellationToken lifetime = default;
+    var launch = Task.Run(() => gate.TryStart(() => { creating.Set(); finishCreation.Wait(3000); }, default, out lifetime));
+    Check(creating.Wait(2000), "process creation not entered");
+    var shutdown = Task.Run(() => { ending.Set(); gate.BeginShutdown(); });
+    try
+    {
+        Check(ending.Wait(2000), "shutdown not requested");
+        Check(!shutdown.Wait(100), "shutdown completed while process creation was still in progress");
+    }
+    finally { finishCreation.Set(); }
+    Check(launch.Wait(2000) && launch.Result && shutdown.Wait(2000), "creation/shutdown deadlocked");
+    Check(lifetime.IsCancellationRequested && !gate.TryStart(() => { }, default, out _), "shutdown failed to cancel/block launches");
+});
+Test("Windows session messages block launches and handle aborted shutdown", () =>
+{
+    try
+    {
+        Check(ShutdownGuard.TryStart(() => { }, default, out var oldLifetime), "initial launch blocked");
+        ShutdownGuard.ObserveWindowMessage(0x0011, IntPtr.Zero); // WM_QUERYENDSESSION
+        Check(ShutdownGuard.IsShuttingDown && oldLifetime.IsCancellationRequested, "early shutdown message ignored");
+        ShutdownGuard.ObserveWindowMessage(0x0016, IntPtr.Zero); // shutdown cancelled
+        Check(!ShutdownGuard.IsShuttingDown, "cancelled shutdown blocked future commands");
+        Check(ShutdownGuard.TryStart(() => { }, default, out var resumedLifetime) && !resumedLifetime.IsCancellationRequested,
+            "new commands inherited cancelled token");
+        Check(oldLifetime.IsCancellationRequested, "old command was re-enabled");
+        ShutdownGuard.ObserveWindowMessage(0x0016, new IntPtr(1)); // confirmed shutdown/logoff
+        Check(!ShutdownGuard.TryStart(() => throw new Exception("launched during shutdown"), default, out _), "confirmed shutdown ignored");
+    }
+    finally { ShutdownGuard.ObserveWindowMessage(0x0016, IntPtr.Zero); }
+});
+Test("shutdown cancels an in-flight helper and prevents the next helper from starting", () =>
+{
+    string marker = Path.Combine(Path.GetTempPath(), "secondmonitor-shutdown-" + Guid.NewGuid());
+    Task<CommandResult> command = null;
+    try
+    {
+        command = Task.Run(() => CommandRunner.Run(self, childPrefix + "--child ready-wait \"" + marker + "\"", 10000));
+        Check(SpinWait.SpinUntil(() => File.Exists(marker), 5000), "child did not start");
+        ShutdownGuard.BeginShutdown();
+        Check(command.Wait(3000), "shutdown did not cancel running command");
+        Check(command.Result.Started && command.Result.Cancelled && !command.Result.Success, "running command reported success during shutdown");
+        var later = CommandRunner.Run(self, childPrefix + "--child fail", 5000);
+        Check(later.Cancelled && !later.Started, "next helper started during shutdown");
+    }
+    finally
+    {
+        ShutdownGuard.BeginShutdown();
+        command?.Wait(3000);
+        ShutdownGuard.ObserveWindowMessage(0x0016, IntPtr.Zero);
+        File.Delete(marker);
+    }
+});
+Test("diagnostics stop before reaching adb when shutdown begins between checks", () =>
+{
+    try
+    {
+        int calls = 0;
+        SetupDiagnostics.Run(new AppSettings(), true, _ => { }, (file, arguments, timeout) =>
+        {
+            calls++;
+            Check(file == "ffmpeg", "diagnostics launched adb during shutdown");
+            ShutdownGuard.BeginShutdown();
+            return new CommandResult { Started = true, ExitCode = 0 };
+        });
+        Check(calls == 1, "diagnostics continued after shutdown");
+        SetupDiagnostics.Run(new AppSettings(), true, _ => { }, (_, _, _) => throw new Exception("diagnostics started during shutdown"));
+    }
+    finally { ShutdownGuard.ObserveWindowMessage(0x0016, IntPtr.Zero); }
+});
+Test("shutdown preparation reaches the active session and blocks new manual work", () =>
+{
+    var sessions = new List<FakeSession>();
+    var engine = new StreamEngine(serial => { var session = new FakeSession(serial); sessions.Add(session); return session; });
+    try
+    {
+        Check(engine.Start(new AppSettings(), default), "stream did not start");
+        engine.PrepareForShutdown();
+        Check(ShutdownGuard.IsShuttingDown && sessions[0].ShutdownPreparations == 1, "active session did not receive shutdown/goodbye preparation");
+        engine.Stop();
+        engine.OpenTabletApp(); engine.CloseTabletApp();
+        Check(!engine.Start(new AppSettings(), default) && sessions.Count == 1, "manual/start work created a session during shutdown");
+    }
+    finally { engine.Stop(); ShutdownGuard.ObserveWindowMessage(0x0016, IntPtr.Zero); }
+});
+
 if (args.Contains("--ffmpeg"))
 {
     Test("real ffmpeg packets decode and carry SPS/PPS with both encoder header modes", () =>
@@ -278,13 +396,13 @@ sealed class FakeSession(string serial) : IStreamSession
     public event Action<string> Stats { add { } remove { } }
     public string DeviceSerial { get; set; } = serial;
     public bool StartResult = true, ClosedTablet;
-    public int Stops, DisplayChanges;
+    public int Stops, DisplayChanges, ShutdownPreparations;
     public ManualResetEventSlim StopEntered, StopRelease;
     public bool Start(AppSettings settings, MonitorTarget screen) => StartResult;
     public void Stop() { Stops++; StopEntered?.Set(); StopRelease?.Wait(3000); }
     public void Emit(string message) => Log?.Invoke(message);
     public void SayGoodbye() { }
-    public void PrepareForShutdown() { }
+    public void PrepareForShutdown() => ShutdownPreparations++;
     public void DisplayChanged() => DisplayChanges++;
     public bool OpenTabletApp() => true;
     public void CloseTabletApp() => ClosedTablet = true;
