@@ -102,7 +102,7 @@ On the tablet:
 ### Recommended: setup executable
 
 Use **`SecondMonitorSetup-<version>.exe`** from the [Releases](../../releases) page
-(`SecondMonitorSetup-1.4.1.exe` for v1.4.1). This is the all-in-one Windows installer
+(`SecondMonitorSetup-1.5.exe` for v1.5). This is the all-in-one Windows installer
 for most users: it includes the PC app, the existing tablet APK, and a USB installation helper.
 You do not need to download the APK separately when using the installer.
 
@@ -235,7 +235,7 @@ Neither contains .NET, so they are small but need the .NET 10 Desktop Runtime on
 1. Run `build-exe.bat` to build the PC app into `app\`.
 2. Copy the existing tablet APK to `installer\SecondMonitor.apk`.
 3. Install [Inno Setup 7](https://jrsoftware.org/isinfo.php), then run `build-installer.bat`.
-4. The result is `installer\output\SecondMonitorSetup-1.4.1.exe`.
+4. The result is `installer\output\SecondMonitorSetup-1.5.exe`.
 
 The build script searches the standard Inno Setup 7 installation folders and PATH.
 For a custom or portable compiler location, set `ISCC` to the full path of `ISCC.exe` first.
@@ -251,7 +251,7 @@ Development checks and a Windows/tablet validation checklist are documented in
 [docs/validation.md](docs/validation.md).
 
 - Programs that don't support touch only react to taps, not swipes. Windows that run as administrator ignore touch unless `SecondMonitor.exe` also runs as administrator.
-- v1.4.0 updates only the PC program and works with the existing tablet APK. Releases that change the touch protocol may require matching PC and tablet versions.
+- v1.5 updates only the PC program and works with the existing tablet APK. Releases that change the touch protocol may require matching PC and tablet versions.
 - Standard capture draws the cursor as a plain arrow. GPU capture draws the real cursor.
 - Windows only. The tablet needs a cable (USB debugging); there is no wireless mode.
 
