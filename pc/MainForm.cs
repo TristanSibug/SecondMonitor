@@ -180,11 +180,9 @@ class MainForm : Form
         // otherwise the messages above could not reach the log.
         IntPtr handle = Handle;
 
-        // "Start streaming when the program opens"
-        if (settings.AutoStartStreaming)
-        {
-            TryStart(false);
-        }
+        // Queue after handle creation so display changes and readiness polling
+        // run on the UI context, including when starting hidden in the tray.
+        BeginInvoke(new Action(async () => await InitializeMonitorAsync()));
     }
 
     // ==================================================================
@@ -476,6 +474,11 @@ class MainForm : Form
     // fits, pick the first monitor that is not the main screen.
     void LoadMonitorSelection()
     {
+        if (settings.MonitorIdentity.Length > 0)
+        {
+            monitorBox.SelectedIndex = Array.FindIndex(screens, m => string.Equals(m.Identity, settings.MonitorIdentity, StringComparison.OrdinalIgnoreCase));
+            return; // Never substitute another monitor for an unavailable saved target.
+        }
         if (settings.MonitorName.Length > 0)
         {
             for (int i = 0; i < screens.Length; i++)
@@ -515,9 +518,11 @@ class MainForm : Form
     {
         // Remember what is chosen now
         string keepName = null;
+        string keepIdentity = null;
         if (screens != null && monitorBox.SelectedIndex >= 0 && monitorBox.SelectedIndex < screens.Length)
         {
             keepName = screens[monitorBox.SelectedIndex].DeviceName;
+            keepIdentity = screens[monitorBox.SelectedIndex].Identity;
         }
         ModeInfo keepMode = resolutionBox.SelectedItem as ModeInfo;
         string keepKey = keepMode != null ? keepMode.Key : "";
@@ -531,7 +536,7 @@ class MainForm : Form
             monitorBox.SelectedIndex = -1;
             for (int i = 0; i < screens.Length; i++)
             {
-                if (screens[i].DeviceName == keepName)
+                if (!string.IsNullOrEmpty(keepIdentity) ? string.Equals(screens[i].Identity, keepIdentity, StringComparison.OrdinalIgnoreCase) : screens[i].DeviceName == keepName)
                 {
                     monitorBox.SelectedIndex = i;
                     break;
@@ -695,10 +700,12 @@ class MainForm : Form
         if (screens != null && monitorBox.SelectedIndex >= 0 && monitorBox.SelectedIndex < screens.Length)
         {
             settings.MonitorName = screens[monitorBox.SelectedIndex].DeviceName;
+            settings.MonitorIdentity = screens[monitorBox.SelectedIndex].Identity ?? "";
         }
 
         ModeInfo mode = resolutionBox.SelectedItem as ModeInfo;
-        settings.Resolution = mode != null ? mode.Key : "";
+        if (monitorBox.SelectedIndex >= 0 && screens[monitorBox.SelectedIndex].Attached)
+            settings.Resolution = mode != null ? mode.Key : "";
 
         settings.Encoder = EncoderCodes[encoderBox.SelectedIndex];
         settings.GpuCapture = captureBox.SelectedIndex == 1;
@@ -768,9 +775,9 @@ class MainForm : Form
     // 'interactive' is true when YOU pressed Start (we may show a message box),
     // false when the program started streaming by itself at startup.
     // ==================================================================
-    void TryStart(bool interactive)
+    void TryStart(bool interactive, bool preserveDisplayMode = false)
     {
-        if (changingMonitor || stopping || ShutdownGuard.IsShuttingDown) return;
+        if (changingMonitor || stopping || displayChanges.IsCancellationRequested || ShutdownGuard.IsShuttingDown) return;
         if (screens == null || monitorBox.SelectedIndex < 0 || monitorBox.SelectedIndex >= screens.Length)
         {
             if (interactive)
@@ -798,7 +805,7 @@ class MainForm : Form
 
         // If you picked a resolution, set it first (only when it differs from the current one)
         ModeInfo wanted = resolutionBox.SelectedItem as ModeInfo;
-        if (wanted != null && !chosen.Primary)
+        if (wanted != null && !chosen.Primary && !preserveDisplayMode)
         {
             ModeInfo current = DisplayModes.GetCurrent(chosen.DeviceName);
             if (current == null || current.Key != wanted.Key)
@@ -874,13 +881,40 @@ class MainForm : Form
         }
     }
 
+    async Task InitializeMonitorAsync()
+    {
+        if (IsDisposed || displayChanges.IsCancellationRequested || ShutdownGuard.IsShuttingDown) return;
+        try
+        {
+            var selected = MonitorActivation.StartupTarget(screens, settings.MonitorIdentity, settings.MonitorName);
+            if (selected == null) { AppendLog("Saved monitor is unavailable. Select a monitor to continue."); return; }
+            monitorBox.SelectedIndex = Array.IndexOf(screens, selected);
+            if (!selected.Attached && !selected.Primary)
+                await ChangeMonitorAsync(); // Launch reconnects and starts, regardless of AutoStartStreaming.
+            else if (settings.AutoStartStreaming)
+                TryStart(false);
+        }
+        catch (Exception ex) { if (!IsDisposed) AppendLog("Startup connection failed: " + ex.Message); }
+    }
+
     async void OnMonitorToggleClicked(object sender, EventArgs e)
     {
+        await ChangeMonitorAsync();
+    }
+
+    async Task ChangeMonitorAsync()
+    {
         if (changingMonitor || stopping || checkingSetup || ShutdownGuard.IsShuttingDown ||
-            monitorBox.SelectedIndex < 0 || monitorBox.SelectedIndex >= screens.Length) return;
-        string name = screens[monitorBox.SelectedIndex].DeviceName;
+            displayChanges.IsCancellationRequested || monitorBox.SelectedIndex < 0 || monitorBox.SelectedIndex >= screens.Length) return;
+        var selected = screens[monitorBox.SelectedIndex];
+        string name = selected.DeviceName;
+        string identity = selected.Identity;
+        bool connecting = !selected.Attached;
         bool closeTablet = closeTabletCheck.Checked;
         bool stopped = false;
+        bool changed = false;
+        ReadControlsIntoSettings();
+        settings.Save(); // Persist the chosen target even if the app exits while detached.
         changingMonitor = true;
         UpdateMonitorControls();
         UpdateResolutionControls();
@@ -889,11 +923,30 @@ class MainForm : Form
             string message = await Task.Run(() =>
             {
                 var connection = new MonitorConnection(monitorConfiguration);
-                connection.Toggle(name, () => { StopStreaming(closeTablet); stopped = true; }, out string detail, displayChanges.Token);
+                changed = connection.Toggle(name, () => { StopStreaming(closeTablet); stopped = true; }, out string detail, displayChanges.Token);
                 return detail;
             });
             if (!IsDisposed) AppendLog(message);
+            if (changed && connecting && !IsDisposed && !displayChanges.IsCancellationRequested)
+            {
+                bool started = await MonitorActivation.StartWhenReadyAsync(() =>
+                {
+                    RefreshMonitors();
+                    var active = Array.Find(screens, m => !string.IsNullOrEmpty(identity)
+                        ? string.Equals(m.Identity, identity, StringComparison.OrdinalIgnoreCase) : m.DeviceName == name);
+                    if (active == null || !active.Attached || active.Primary) return false;
+                    monitorBox.SelectedIndex = Array.IndexOf(screens, active);
+                    return Array.Exists(Screen.AllScreens, screen => screen.DeviceName == active.DeviceName);
+                }, () =>
+                {
+                    changingMonitor = false;
+                    TryStart(false, true);
+                }, displayChanges.Token);
+                if (!started && !IsDisposed && !displayChanges.IsCancellationRequested && !ShutdownGuard.IsShuttingDown)
+                    AppendLog("Monitor connected, but Windows has not made it ready for capture yet. Press Start when available.");
+            }
         }
+        catch (OperationCanceledException) { } // Closing cancels readiness polling.
         catch (Exception ex) { if (!IsDisposed) AppendLog("Display change failed: " + ex.Message); }
         finally
         {

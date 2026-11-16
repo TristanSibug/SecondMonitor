@@ -32,6 +32,7 @@ class AppSettings
     public int GpuOutputIndex = -1;       // which screen ffmpeg's GPU capture uses (-1 = find it automatically)
     public string Resolution = "";        // monitor resolution to set on Start, like "1280x800@60" ("" = leave as is)
     public string MonitorName = "";       // Windows' own name for the chosen monitor, like \\.\DISPLAY8 (more reliable than its list number)
+    public string MonitorIdentity = ""; // Stable Windows monitor device path.
     public bool AutoStartStreaming = false; // start streaming as soon as the program opens
     public bool StartInTray = false;      // when the program opens, hide the window in the system tray
     public bool CloseToTray = false;      // closing the window keeps the program running in the tray
@@ -95,6 +96,7 @@ class AppSettings
                 else if (name == "GpuOutputIndex" && int.TryParse(value, out number)) s.GpuOutputIndex = number;
                 else if (name == "Resolution") s.Resolution = value;
                 else if (name == "MonitorName") s.MonitorName = value;
+                else if (name == "MonitorIdentity") s.MonitorIdentity = value;
                 else if (name == "AutoStartStreaming" && bool.TryParse(value, out flag)) s.AutoStartStreaming = flag;
                 else if (name == "StartInTray" && bool.TryParse(value, out flag)) s.StartInTray = flag;
                 else if (name == "CloseToTray" && bool.TryParse(value, out flag)) s.CloseToTray = flag;
@@ -131,6 +133,7 @@ class AppSettings
                 "GpuOutputIndex=" + GpuOutputIndex,
                 "Resolution=" + Resolution,
                 "MonitorName=" + MonitorName,
+                "MonitorIdentity=" + MonitorIdentity,
                 "AutoStartStreaming=" + AutoStartStreaming,
                 "StartInTray=" + StartInTray,
                 "CloseToTray=" + CloseToTray,

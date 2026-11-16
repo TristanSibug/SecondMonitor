@@ -272,6 +272,7 @@ Test("Windows display refusal is reported without claiming a connection", () =>
 
 Test("DisplayConfig structures match the Windows ABI", () =>
 {
+    Check(System.Runtime.InteropServices.Marshal.SizeOf<DisplayTopology.TargetName>() == 420, "target identity ABI");
     Check(System.Runtime.InteropServices.Marshal.SizeOf<DisplayTopology.DisplayPath>() == 72, "path ABI");
     Check(System.Runtime.InteropServices.Marshal.SizeOf<DisplayTopology.Mode>() == 64, "mode ABI");
     Check(System.Runtime.InteropServices.Marshal.SizeOf<DisplayTopology.Signal>() == 48, "timing ABI");
@@ -348,6 +349,93 @@ Test("DisplayConfig refuses primary, shared sources, validation errors and stale
     api.AfterValidate = () => api.Current.Paths = api.Current.Paths.Take(1).ToArray();
     Check(!DisplayTopology.Apply(api, () => monitors, "DISPLAY8", true, out message) && message.Contains("changed"), "stale plan applied");
     Check(api.Applied == null, "topology changed during validation but operation applied");
+});
+
+Test("startup selects the saved monitor identity instead of a reused display number", () =>
+{
+    var wrong = new DesktopMonitor { DeviceName = "DISPLAY8", Identity = "other", Attached = false };
+    var saved = new DesktopMonitor { DeviceName = "DISPLAY3", Identity = "saved", Attached = false };
+    DesktopMonitor[] monitors = [wrong, saved];
+    Check(ReferenceEquals(MonitorActivation.StartupTarget(monitors, "SAVED", "DISPLAY8"), saved), "reused GDI source substituted");
+    Check(MonitorActivation.StartupTarget(monitors, "missing", "DISPLAY8") == null, "missing saved target replaced");
+    Check(ReferenceEquals(MonitorActivation.StartupTarget(monitors, "", "DISPLAY8"), wrong), "legacy selection not migrated");
+});
+Test("activation waits for display readiness and starts exactly once", () =>
+{
+    int polls = 0, starts = 0;
+    Check(MonitorActivation.StartWhenReadyAsync(() => ++polls >= 3, () => starts++, default).GetAwaiter().GetResult(), "activation failed");
+    Check(polls == 3 && starts == 1, "started before readiness or started repeatedly");
+});
+Test("activation timeout, closing and shutdown never start streaming", () =>
+{
+    int starts = 0;
+    Check(!MonitorActivation.StartWhenReadyAsync(() => false, () => starts++, default, 0).GetAwaiter().GetResult(), "timeout accepted");
+    using var cancel = new CancellationTokenSource(); cancel.Cancel();
+    Check(!MonitorActivation.StartWhenReadyAsync(() => true, () => starts++, cancel.Token).GetAwaiter().GetResult(), "closing started a stream");
+    try
+    {
+        ShutdownGuard.BeginShutdown();
+        Check(!MonitorActivation.StartWhenReadyAsync(() => true, () => starts++, default).GetAwaiter().GetResult(), "shutdown started a stream");
+    }
+    finally { ShutdownGuard.ObserveWindowMessage(0x0016, IntPtr.Zero); }
+    Check(starts == 0, "stream started after abort");
+});
+Test("saved layout restores resolution and negative position after restarting with different source IDs", () =>
+{
+    string folder = Path.Combine(Path.GetTempPath(), "monitor-layout-" + Guid.NewGuid());
+    string file = Path.Combine(folder, "layouts.json");
+    try
+    {
+        var api = new FakeDisplayApi();
+        var monitors = DisplayTopology.ListMonitors(api, api.Gdi(), "DISPLAY8");
+        var layouts = new MonitorLayoutStore(file);
+        Check(DisplayTopology.Apply(api, () => monitors, "DISPLAY8", true, out _, layouts), "initial connect failed");
+        api.Current = api.Applied;
+        var path = api.Current.Paths[2];
+        path.Target.Rotation = 1; path.Target.Scaling = 1;
+        path.Target.RefreshRate = new() { Numerator = 60000, Denominator = 1001 };
+        api.Current.Paths[2] = path;
+        var source = api.Current.Modes[path.Source.ModeIndex];
+        source.Data.Width = 1024; source.Data.Height = 768; source.Data.X = -1024; source.Data.Y = -120;
+        api.Current.Modes[path.Source.ModeIndex] = source;
+        var attached = new DesktopMonitor { DeviceName = "DISPLAY8", Identity = "monitor-101", Attached = true, Bounds = new(-1024, -120, 1024, 768) };
+        Check(DisplayTopology.Apply(api, () => [..api.Gdi().Where(m => m.Attached), attached], "DISPLAY8", false, out _, layouts), "disconnect failed");
+        Check(File.Exists(file), "layout not persisted");
+        var restarted = new FakeDisplayApi();
+        // Source numbering changed, but the monitor target identity is unchanged.
+        var list = DisplayTopology.ListMonitors(restarted, restarted.Gdi(), "DISPLAY4", null, new MonitorLayoutStore(file));
+        var detached = list.Single(m => !m.Attached);
+        Check(detached.Bounds == attached.Bounds && detached.DeviceName == "DISPLAY4", "saved bounds or remapped selection lost");
+        var before = restarted.Current;
+        Check(DisplayTopology.Apply(restarted, () => list, "DISPLAY4", true, out _, new MonitorLayoutStore(file)), "restart connect failed");
+        var restoredPath = restarted.Applied.Paths.Last();
+        var restored = restarted.Applied.Modes[restoredPath.Source.ModeIndex];
+        Check(restored.Data.Width == 1024 && restored.Data.Height == 768 && restored.Data.X == -1024 && restored.Data.Y == -120, "layout reset to preferred mode/right edge");
+        Check(restored.Id == 3 && restoredPath.Target.RefreshRate.Numerator == 60000, "source identity or refresh not restored");
+        Check(restarted.Applied.Paths.Take(2).SequenceEqual(before.Paths) && restarted.Applied.Modes.Take(2).SequenceEqual(before.Modes), "other displays changed");
+    }
+    finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+});
+Test("layout capture follows Windows display changes and ignores invalid saved dimensions", () =>
+{
+    string folder = Path.Combine(Path.GetTempPath(), "monitor-layout-" + Guid.NewGuid());
+    string file = Path.Combine(folder, "layouts.json");
+    try
+    {
+        var layouts = new MonitorLayoutStore(file);
+        var api = new FakeDisplayApi();
+        DisplayTopology.ListMonitors(api, api.Gdi(), "DISPLAY8", null, layouts);
+        Check(layouts.Get("monitor-100") == null, "primary layout captured");
+        Check(layouts.Get("monitor-102").X == 1920, "active secondary not captured");
+        var mode = api.Current.Modes[1]; mode.Data.X = -800; api.Current.Modes[1] = mode;
+        DisplayTopology.ListMonitors(api, api.Gdi(), "DISPLAY8", null, layouts);
+        Check(new MonitorLayoutStore(file).Get("MONITOR-102").X == -800, "last active position not persisted");
+        layouts.Remember("invalid", new(0, 0, 4, 0, 0, 1, 1, 60, 1, 0));
+        Check(layouts.Get("invalid") == null, "invalid mode accepted");
+        File.WriteAllText(file, "broken JSON");
+        Check(new MonitorLayoutStore(file).Get("monitor-102") == null, "corrupt layout not ignored");
+    }
+    finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
 });
 
 string self = Environment.ProcessPath;
@@ -615,6 +703,7 @@ sealed class FakeDisplayApi : DisplayTopology.IApi
     public DisplayTopology.Snapshot Query(bool activeOnly) => new() {
         Paths = (activeOnly ? Current : All).Paths.ToArray(), Modes = (activeOnly ? Current : All).Modes.ToArray()
     };
+    public string Identity(DisplayTopology.Target target) => "monitor-" + target.Id;
     public string SourceName(DisplayTopology.Source source) => "DISPLAY" + (source.Id + 1);
     public DisplayTopology.Mode PreferredSource(DisplayTopology.DisplayPath path) => new() {
         Type = 1, Id = path.Source.Id, Adapter = path.Source.Adapter, Data = new() { Width = 1280, Height = 800, PixelFormat = 4 }

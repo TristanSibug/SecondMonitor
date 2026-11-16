@@ -39,13 +39,16 @@ class ModeInfo
 sealed class WindowsMonitorConfiguration : IMonitorConfiguration
 {
     string preferredName;
+    readonly MonitorLayoutStore layouts = MonitorLayoutStore.ForCurrentUser();
     readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> targetSources = new();
     public WindowsMonitorConfiguration(string preferredName) { this.preferredName = preferredName; }
-    public DesktopMonitor[] List() { return DisplayTopology.ListMonitors(preferredName, targetSources); }
+    public DesktopMonitor[] List() { return DisplayTopology.ListMonitors(preferredName, targetSources, layouts); }
     public bool SetConnected(string name, bool connected, out string message)
     {
         preferredName = name;
-        return DisplayTopology.SetConnected(name, connected, List, out message);
+        bool result = DisplayTopology.SetConnected(name, connected, List, layouts, out message);
+        if (layouts.LastError != null) message += " Layout could only be remembered for this session: " + layouts.LastError;
+        return result;
     }
 }
 

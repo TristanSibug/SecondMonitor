@@ -141,10 +141,21 @@ Settings from older versions beside the executable are still read when migrating
 Beside **Start** and **Stop**, **Connect monitor** / **Disconnect monitor** toggles the
 selected secondary display in Windows. Only active displays and available disconnected monitor targets appear in the selector.
 Disconnect stops streaming first and honors **Close tablet app when stopped**.
-Connect extends the desktop beside the rightmost active display; press **Start** to stream.
+Connect restores that monitor's last resolution and desktop position, then starts streaming
+automatically once Windows makes it ready for capture. Launching the app also reconnects
+the saved secondary monitor if it is disconnected, even when **Start streaming when
+opened** is unchecked. When the monitor is already connected, that checkbox controls
+whether launching the app starts streaming.
 The primary display is protected, and other displays keep their modes and positions.
 This uses Windows DisplayConfig APIs and does not install, enable or disable a driver.
 Automatic tablet opening and closing still follow their checkboxes.
+The last active layouts are saved by monitor identity in
+`%APPDATA%\SecondMonitor\monitor-layouts.json`, including across app restarts.
+For a monitor with no saved layout yet, Connect uses its preferred resolution and
+places it beside the rightmost display. Set its desired resolution and position once
+in Windows Display settings while this version is running; subsequent reconnects
+restore them. If Windows refuses a saved layout after the desktop changes, the app
+reports the failure without moving your other displays.
 
 Press **Check setup** before streaming to check ffmpeg, the selected encoder, adb authorization,
 the selected monitor, and whether the tablet app is installed. Results appear in the log.

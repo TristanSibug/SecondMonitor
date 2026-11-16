@@ -6,6 +6,7 @@ sealed class DesktopMonitor
 {
     public string DeviceName;
     public string TargetKey;
+    public string Identity;
     public bool Primary;
     public bool Attached;
     public Rectangle Bounds;

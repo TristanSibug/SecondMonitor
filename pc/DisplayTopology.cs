@@ -40,12 +40,21 @@ static class DisplayTopology
     }
     [StructLayout(LayoutKind.Sequential)] internal struct Mode
     { public uint Type, Id; public Adapter Adapter; public ModeData Data; }
-    [StructLayout(LayoutKind.Sequential)] struct Header
+    [StructLayout(LayoutKind.Sequential)] internal struct Header
     { public uint Type, Size; public Adapter Adapter; public uint Id; }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct SourceName
     {
         public Header Header;
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Name;
+    }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] internal struct TargetName
+    {
+        public Header Header;
+        public uint Flags, Technology;
+        public ushort Manufacturer, Product;
+        public uint Connector;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string FriendlyName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DevicePath;
     }
     [StructLayout(LayoutKind.Sequential)] struct PreferredMode
     { public Header Header; public uint Width, Height; public Signal Signal; }
@@ -55,6 +64,7 @@ static class DisplayTopology
         [Out] DisplayPath[] paths, ref uint modeCount, [Out] Mode[] modes, IntPtr topology);
     [DllImport("user32.dll")] static extern int DisplayConfigGetDeviceInfo(ref SourceName name);
     [DllImport("user32.dll")] static extern int DisplayConfigGetDeviceInfo(ref PreferredMode mode);
+    [DllImport("user32.dll")] static extern int DisplayConfigGetDeviceInfo(ref TargetName name);
     [DllImport("user32.dll")] static extern int SetDisplayConfig(uint pathCount, DisplayPath[] paths,
         uint modeCount, Mode[] modes, uint flags);
 
@@ -67,6 +77,7 @@ static class DisplayTopology
     {
         Snapshot Query(bool activeOnly);
         string SourceName(Source source);
+        string Identity(Target target);
         Mode PreferredSource(DisplayPath path);
         int Set(Snapshot snapshot, bool validate);
     }
@@ -93,6 +104,11 @@ static class DisplayTopology
             var info = new SourceName { Header = new Header { Type = 1, Size = (uint)Marshal.SizeOf<SourceName>(), Adapter = source.Adapter, Id = source.Id } };
             return DisplayConfigGetDeviceInfo(ref info) == 0 ? info.Name : null;
         }
+        public string Identity(Target target)
+        {
+            var info = new TargetName { Header = new Header { Type = 2, Size = (uint)Marshal.SizeOf<TargetName>(), Adapter = target.Adapter, Id = target.Id } };
+            return DisplayConfigGetDeviceInfo(ref info) == 0 && !string.IsNullOrEmpty(info.DevicePath) ? info.DevicePath : null;
+        }
         public Mode PreferredSource(DisplayPath path)
         {
             var info = new PreferredMode { Header = new Header { Type = 3, Size = (uint)Marshal.SizeOf<PreferredMode>(), Adapter = path.Target.Adapter, Id = path.Target.Id } };
@@ -117,12 +133,12 @@ static class DisplayTopology
     static bool SameSource(Source a, Source b) => Same(a.Adapter, b.Adapter) && a.Id == b.Id;
     static bool SameTarget(Target a, Target b) => Same(a.Adapter, b.Adapter) && a.Id == b.Id;
 
-    public static DesktopMonitor[] ListMonitors(string preferredName, IDictionary<string, string> targetSources)
+    public static DesktopMonitor[] ListMonitors(string preferredName, IDictionary<string, string> targetSources, MonitorLayoutStore layouts)
     {
-        return ListMonitors(new WindowsApi(), DisplayModes.ListMonitors(), preferredName, targetSources);
+        return ListMonitors(new WindowsApi(), DisplayModes.ListMonitors(), preferredName, targetSources, layouts);
     }
 
-    internal static DesktopMonitor[] ListMonitors(IApi api, DesktopMonitor[] gdi, string preferredName, IDictionary<string, string> targetSources = null)
+    internal static DesktopMonitor[] ListMonitors(IApi api, DesktopMonitor[] gdi, string preferredName, IDictionary<string, string> targetSources = null, MonitorLayoutStore layouts = null)
     {
         var current = api.Query(true);
         var result = new List<DesktopMonitor>();
@@ -133,6 +149,8 @@ static class DisplayTopology
             if (activePaths.Length == 1)
             {
                 monitor.TargetKey = TargetKey(activePaths[0].Target);
+                monitor.Identity = api.Identity(activePaths[0].Target);
+                if (!monitor.Primary && layouts != null) Remember(layouts, api, current, activePaths[0]);
                 if (targetSources != null) targetSources[monitor.TargetKey] = monitor.DeviceName;
             }
             result.Add(monitor);
@@ -164,17 +182,32 @@ static class DisplayTopology
             var bounds = System.Drawing.Rectangle.Empty;
             try
             {
-                var mode = api.PreferredSource(candidate.Path);
-                bounds = new System.Drawing.Rectangle(0, 0, (int)mode.Data.Width, (int)mode.Data.Height);
+                var saved = layouts?.Get(api.Identity(candidate.Path.Target));
+                if (saved != null) bounds = new System.Drawing.Rectangle(saved.X, saved.Y, (int)saved.Width, (int)saved.Height);
+                else
+                {
+                    var mode = api.PreferredSource(candidate.Path);
+                    bounds = new System.Drawing.Rectangle(0, 0, (int)mode.Data.Width, (int)mode.Data.Height);
+                }
             }
             catch (InvalidOperationException) { } // Keep the target visible so failure can be diagnosed on Connect.
-            result.Add(new DesktopMonitor { DeviceName = candidate.Name, TargetKey = group.Key, Bounds = bounds });
+            result.Add(new DesktopMonitor { DeviceName = candidate.Name, TargetKey = group.Key, Identity = api.Identity(candidate.Path.Target), Bounds = bounds });
             usedSources.Add(candidate.Name);
         }
         return result.ToArray();
     }
 
-    internal static Snapshot Plan(IApi api, Snapshot current, string name, bool connect, DesktopMonitor[] monitors)
+    static void Remember(MonitorLayoutStore layouts, IApi api, Snapshot snapshot, DisplayPath path)
+    {
+        if (path.Source.ModeIndex >= snapshot.Modes.Length) return;
+        var source = snapshot.Modes[path.Source.ModeIndex];
+        if (source.Type != 1) return;
+        layouts.Remember(api.Identity(path.Target), new MonitorLayout(source.Data.Width, source.Data.Height,
+            source.Data.PixelFormat, source.Data.X, source.Data.Y, path.Target.Rotation, path.Target.Scaling,
+            path.Target.RefreshRate.Numerator, path.Target.RefreshRate.Denominator, path.Target.ScanLineOrdering));
+    }
+
+    internal static Snapshot Plan(IApi api, Snapshot current, string name, bool connect, DesktopMonitor[] monitors, MonitorLayoutStore layouts = null)
     {
         var paths = new List<DisplayPath>(current.Paths);
         var modes = new List<Mode>(current.Modes);
@@ -186,6 +219,7 @@ static class DisplayTopology
             var matches = paths.Where(p => api.SourceName(p.Source) == name).ToArray();
             // Refuse clone groups: changing their shared source could affect another display.
             if (matches.Length != 1) throw new InvalidOperationException("Cannot disconnect a missing or shared display source.");
+            if (layouts != null) Remember(layouts, api, current, matches[0]);
             paths.Remove(matches[0]);
         }
         else
@@ -197,10 +231,22 @@ static class DisplayTopology
             if (candidates.Length != 1)
                 throw new InvalidOperationException("Windows did not expose one available target for this display. Check Windows Display settings and refresh.");
             var path = candidates[0];
-            Mode source = api.PreferredSource(path);
-            var position = MonitorConnection.ConnectionPosition(monitors);
-            source.Data.X = position.X;
-            source.Data.Y = position.Y;
+            var saved = layouts?.Get(api.Identity(path.Target));
+            Mode source;
+            if (saved != null)
+            {
+                source = new Mode { Type = 1, Id = path.Source.Id, Adapter = path.Source.Adapter,
+                    Data = new ModeData { Width = saved.Width, Height = saved.Height, PixelFormat = saved.PixelFormat, X = saved.X, Y = saved.Y } };
+                path.Target.Rotation = saved.Rotation;
+                path.Target.Scaling = saved.Scaling;
+            }
+            else
+            {
+                source = api.PreferredSource(path);
+                var position = MonitorConnection.ConnectionPosition(monitors);
+                source.Data.X = position.X;
+                source.Data.Y = position.Y;
+            }
             int sourceIndex = modes.FindIndex(m => m.Type == 1 && m.Id == source.Id && Same(m.Adapter, source.Adapter));
             if (sourceIndex < 0) { sourceIndex = modes.Count; modes.Add(source); }
             else modes[sourceIndex] = source; // Reuse an unreferenced entry, never duplicate an identity.
@@ -209,8 +255,8 @@ static class DisplayTopology
             // Let Windows choose target timing for the selected display only.
             // Existing paths retain their exact source and target mode indices.
             path.Target.ModeIndex = InvalidMode;
-            path.Target.RefreshRate = default;
-            path.Target.ScanLineOrdering = 0;
+            path.Target.RefreshRate = saved == null ? default : new Rational { Numerator = saved.RefreshNumerator, Denominator = saved.RefreshDenominator };
+            path.Target.ScanLineOrdering = saved?.ScanLineOrdering ?? 0;
             path.Target.StatusFlags = 0;
             path.Flags = 1; // DISPLAYCONFIG_PATH_ACTIVE
             paths.Add(path);
@@ -218,18 +264,18 @@ static class DisplayTopology
         return new Snapshot { Paths = paths.ToArray(), Modes = modes.ToArray() };
     }
 
-    public static bool SetConnected(string name, bool connect, Func<DesktopMonitor[]> list, out string message)
+    public static bool SetConnected(string name, bool connect, Func<DesktopMonitor[]> list, MonitorLayoutStore layouts, out string message)
     {
-        try { return Apply(new WindowsApi(), list, name, connect, out message); }
+        try { return Apply(new WindowsApi(), list, name, connect, out message, layouts); }
         catch (Exception ex) { message = ex.Message; return false; }
     }
 
-    internal static bool Apply(IApi api, Func<DesktopMonitor[]> list, string name, bool connect, out string message)
+    internal static bool Apply(IApi api, Func<DesktopMonitor[]> list, string name, bool connect, out string message, MonitorLayoutStore layouts = null)
     {
         var current = api.Query(true);
         var before = list();
         var selected = before.SingleOrDefault(m => m.DeviceName == name);
-        var planned = Plan(api, current, name, connect, before);
+        var planned = Plan(api, current, name, connect, before, layouts);
         int error = api.Set(planned, true);
         if (error == 0)
         {

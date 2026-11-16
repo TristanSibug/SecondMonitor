@@ -87,8 +87,10 @@ authorized USB-connected tablet running the existing APK.
 ## Monitor connection toggle
 
 Connection changes use QueryDisplayConfig, DisplayConfigGetDeviceInfo and
-SetDisplayConfig. The selected target gets its preferred source dimensions; Windows
-chooses its target timing. Current paths and modes for the other displays are
+SetDisplayConfig. The selected target restores its last source dimensions, position, rotation and
+refresh from monitor-layouts.json, keyed by Windows monitor device path. With no saved
+layout it uses preferred dimensions beside the rightmost display. Windows chooses
+compatible target timing. Current paths and modes for the other displays are
 supplied unchanged, without SDC_ALLOW_CHANGES. The selector groups available paths
 by target identity instead of showing every dormant GDI adapter/source. This also
 supports reconnecting after restarting the app with no saved DEVMODE cache.
@@ -106,22 +108,32 @@ positions, sizes and primary designation before testing:
    the toggle. Disconnect a secondary while streaming: confirm streaming stops
    before it leaves the desktop and the close-tablet checkbox is honored.
 2. Confirm the detached device remains selected/listed, **Start** and resolution
-   changes are disabled for it, and **Connect monitor** restores it beside the
-   rightmost active display. Confirm every other display retains its original
+   changes are disabled for it, and **Connect monitor** restores its last resolution
+   and desktop position, then starts streaming automatically. Confirm every other display retains its original
    mode, position and primary designation. Repeat with negative coordinates and
    a rightmost display above/below the primary.
 3. Confirm unused DISPLAY2..DISPLAY7 source routes do not appear as phantom
    monitors, and only one row is shown per available disconnected target. Add/remove
    another display and confirm the existing selection never changes target identity.
-   Restart the app while the secondary is disconnected, reconnect it, then press
-   **Start**. Confirm automatic tablet opening still follows its checkbox. Repeat
+   Close the app while the secondary is disconnected, then launch it with **Start
+   streaming when opened** unchecked. Confirm it reconnects the saved secondary and
+   starts streaming without a click. Reopening when it is already connected should
+   still honor the checkbox. Confirm automatic tablet opening follows its checkbox. Repeat
    Stop/disconnect with automatic closing checked and unchecked.
 4. Change the primary or unplug the selected display while Stop is pending.
    Confirm the operation refuses a newly primary/missing device and never
    substitutes another display. Test Windows refusal and shutdown/logoff during
    Stop: no queued connection operation or adb launch should start afterward.
 
-Both Windows publish modes and all 34 regression/integration tests passed in the
+5. Set a non-default resolution and a negative desktop position in Windows Display
+   settings. Disconnect/reconnect and exit/relaunch with the display disconnected;
+   confirm both settings survive. Repeat with display numbers changed and with
+   another monitor present. An unavailable saved target must never be substituted.
+6. Close or shut down during connection readiness polling; confirm no stream starts
+   afterward. Simulate a rejected connection and verify no Start follows it. If a
+   saved layout is no longer valid, confirm the error leaves other displays intact.
+
+Both Windows publish modes and all 39 regression/integration tests passed in the
 Linux environment using .NET SDK 10.0.403 and ffmpeg 7.1.5. The monitor tests exercise policy, ordering, native structure sizes, DisplayConfig
 planning, target filtering, reconnection without GDI modes, and topology changes
 using a simulated display API. The Windows GUI,
