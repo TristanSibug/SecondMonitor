@@ -5,6 +5,7 @@ using System.Drawing;
 sealed class DesktopMonitor
 {
     public string DeviceName;
+    public string TargetKey;
     public bool Primary;
     public bool Attached;
     public Rectangle Bounds;
@@ -36,10 +37,11 @@ sealed class MonitorConnection
             message = "Select an available secondary display. The primary display is protected.";
             return false;
         }
+        string targetKey = selected.TargetKey;
         bool connect = !selected.Attached;
         if (!connect) stopStreaming(); // Any failure aborts the display change.
         selected = Find(deviceName);
-        if (selected == null || selected.Primary || selected.Attached == connect)
+        if (selected == null || selected.TargetKey != targetKey || selected.Primary || selected.Attached == connect)
         {
             message = "The display configuration changed. Refresh and try again.";
             return false;

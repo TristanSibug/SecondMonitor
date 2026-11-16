@@ -57,7 +57,7 @@ class MainForm : Form
     Button startButton;
     Button stopButton;
     Button monitorToggleButton;
-    readonly IMonitorConfiguration monitorConfiguration = new WindowsMonitorConfiguration();
+    readonly IMonitorConfiguration monitorConfiguration;
     readonly CancellationTokenSource displayChanges = new CancellationTokenSource();
     bool changingMonitor;
     bool stopping;
@@ -119,6 +119,7 @@ class MainForm : Form
     public MainForm()
     {
         settings = AppSettings.Load();
+        monitorConfiguration = new WindowsMonitorConfiguration(settings.MonitorName);
 
         // If "start hidden in the tray" is ticked, the window must not appear when the program opens
         allowVisible = !settings.StartInTray;

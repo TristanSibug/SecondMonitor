@@ -139,11 +139,11 @@ or a dependency installation fails, Setup lists what needs to be installed manua
 Your choices are saved in `%APPDATA%\SecondMonitor\settings.txt`.
 Settings from older versions beside the executable are still read when migrating.
 Beside **Start** and **Stop**, **Connect monitor** / **Disconnect monitor** toggles the
-selected secondary display in Windows. Disconnected displays remain in the selector.
+selected secondary display in Windows. Only active displays and available disconnected monitor targets appear in the selector.
 Disconnect stops streaming first and honors **Close tablet app when stopped**.
 Connect extends the desktop beside the rightmost active display; press **Start** to stream.
 The primary display is protected, and other displays keep their modes and positions.
-This uses Windows display settings APIs and does not install, enable or disable a driver.
+This uses Windows DisplayConfig APIs and does not install, enable or disable a driver.
 Automatic tablet opening and closing still follow their checkboxes.
 
 Press **Check setup** before streaming to check ffmpeg, the selected encoder, adb authorization,

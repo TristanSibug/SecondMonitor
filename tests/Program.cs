@@ -231,6 +231,9 @@ Test("failed stop and changed topology abort monitor disconnect", () =>
     Check(!toggle.Toggle("secondary", () => config.Monitors[1].Primary = true, out _), "detached new primary");
     Check(config.Changes.Count == 0, "new primary changed");
     config.Monitors[1].Primary = false;
+    Check(!toggle.Toggle("secondary", () => config.Monitors[1].TargetKey = "replacement", out _), "changed a substituted physical target");
+    Check(config.Changes.Count == 0, "target identity protection failed");
+    config.Monitors[1].TargetKey = null;
     Check(!toggle.Toggle("secondary", () => config.Monitors = [config.Monitors[0], config.Monitors[2]], out _), "substituted another display");
     Check(config.Changes.Count == 0, "changed a different display");
 });
@@ -265,6 +268,86 @@ Test("Windows display refusal is reported without claiming a connection", () =>
     config.Monitors[1].Attached = false;
     Check(!new MonitorConnection(config).Toggle("secondary", () => { }, out var message), "failure reported as success");
     Check(message.Contains("refused") && !config.Monitors[1].Attached, "failure state lost");
+});
+
+Test("DisplayConfig structures match the Windows ABI", () =>
+{
+    Check(System.Runtime.InteropServices.Marshal.SizeOf<DisplayTopology.DisplayPath>() == 72, "path ABI");
+    Check(System.Runtime.InteropServices.Marshal.SizeOf<DisplayTopology.Mode>() == 64, "mode ABI");
+    Check(System.Runtime.InteropServices.Marshal.SizeOf<DisplayTopology.Signal>() == 48, "timing ABI");
+});
+Test("display selector filters unused sources and deduplicates disconnected targets", () =>
+{
+    var api = new FakeDisplayApi();
+    var gdi = api.Gdi();
+    var listed = DisplayTopology.ListMonitors(api, gdi, "DISPLAY8");
+    Check(listed.Length == 3 && listed.Count(m => !m.Attached) == 1, "phantom adapters listed as monitors");
+    var detached = listed.Single(m => !m.Attached);
+    Check(detached.DeviceName == "DISPLAY8" && detached.Bounds.Width == 1280 && detached.Bounds.Height == 800, "lost selected target or preferred dimensions");
+    Check(listed[0].Primary && listed[1].DeviceName == "DISPLAY2", "active displays lost");
+    api.All.Paths = api.All.Paths.Where(p => p.Target.Id != 101).ToArray();
+    Check(DisplayTopology.ListMonitors(api, gdi, "DISPLAY8").Length == 2, "unavailable target retained");
+});
+Test("display target routing stays stable when another disconnected target is added", () =>
+{
+    var api = new FakeDisplayApi();
+    var remembered = new Dictionary<string, string>();
+    var initial = DisplayTopology.ListMonitors(api, api.Gdi(), "DISPLAY8", remembered).Single(m => !m.Attached);
+    var extra = api.All.Paths.First(p => p.Target.Id == 101);
+    extra.Target.Id = 10;
+    api.All.Paths = api.All.Paths.Append(extra).ToArray();
+    var refreshed = DisplayTopology.ListMonitors(api, api.Gdi(), "DISPLAY8", remembered);
+    Check(refreshed.Single(m => m.TargetKey == initial.TargetKey).DeviceName == initial.DeviceName, "existing target remapped to another source");
+});
+Test("DisplayConfig reconnect works without detached GDI modes and preserves active paths", () =>
+{
+    var api = new FakeDisplayApi();
+    var before = api.Current;
+    var monitors = DisplayTopology.ListMonitors(api, api.Gdi(), "DISPLAY8");
+    Check(DisplayTopology.Apply(api, () => monitors, "DISPLAY8", true, out var message), message);
+    Check(api.Calls.SequenceEqual(new[] { true, false }), "did not validate before apply");
+    var applied = api.Applied;
+    Check(applied.Paths.Take(2).SequenceEqual(before.Paths), "changed another display path");
+    Check(applied.Modes.Take(before.Modes.Length).SequenceEqual(before.Modes), "changed another display mode");
+    var path = applied.Paths.Last();
+    var mode = applied.Modes[path.Source.ModeIndex];
+    Check(path.Target.Id == 101 && path.Target.ModeIndex == DisplayTopology.InvalidMode, "wrong target/timing selection");
+    Check(mode.Data.Width == 1280 && mode.Data.Height == 800 && mode.Data.X == 2720 && mode.Data.Y == 500, "invalid preferred source mode or position");
+});
+Test("DisplayConfig disconnect retains other paths and can reconnect after app restart", () =>
+{
+    var api = new FakeDisplayApi();
+    var monitors = DisplayTopology.ListMonitors(api, api.Gdi(), "DISPLAY8");
+    Check(DisplayTopology.Apply(api, () => monitors, "DISPLAY8", true, out _), "connect failed");
+    api.Current = api.Applied;
+    var attached = api.Gdi().Where(m => m.Attached).Concat(new[] {
+        new DesktopMonitor { DeviceName = "DISPLAY8", Attached = true, Bounds = new(2720, 500, 1280, 800) }
+    }).ToArray();
+    Check(DisplayTopology.Apply(api, () => attached, "DISPLAY8", false, out _), "disconnect failed");
+    Check(api.Applied.Paths.SequenceEqual(api.Current.Paths.Take(2)), "removed wrong paths");
+    api.Current = api.Applied;
+    // A fresh API instance has no in-process saved DEVMODE or connection cache.
+    var restarted = new FakeDisplayApi { Current = api.Current };
+    var restoredList = DisplayTopology.ListMonitors(restarted, restarted.Gdi(), "DISPLAY8");
+    Check(DisplayTopology.Apply(restarted, () => restoredList, "DISPLAY8", true, out _), "restart reconnect needs missing GDI mode cache");
+    Check(restarted.Applied.Modes.Count(m => m.Type == 1 && m.Id == 7) == 1, "duplicated a source mode identity");
+});
+Test("DisplayConfig refuses primary, shared sources, validation errors and stale topology", () =>
+{
+    var api = new FakeDisplayApi();
+    var monitors = DisplayTopology.ListMonitors(api, api.Gdi(), "DISPLAY8");
+    Throws<InvalidOperationException>(() => DisplayTopology.Plan(api, api.Current, "DISPLAY1", false, monitors));
+    var clone = api.Current.Paths[0]; clone.Target.Id = 999;
+    api.Current.Paths = api.Current.Paths.Append(clone).ToArray();
+    monitors[0].Primary = false;
+    Throws<InvalidOperationException>(() => DisplayTopology.Plan(api, api.Current, "DISPLAY1", false, monitors));
+    api = new FakeDisplayApi { Error = 87 };
+    Check(!DisplayTopology.Apply(api, () => monitors, "DISPLAY8", true, out var message) && message.Contains("87"), "validation error lost");
+    Check(api.Applied == null, "applied despite failed validation");
+    api = new FakeDisplayApi();
+    api.AfterValidate = () => api.Current.Paths = api.Current.Paths.Take(1).ToArray();
+    Check(!DisplayTopology.Apply(api, () => monitors, "DISPLAY8", true, out message) && message.Contains("changed"), "stale plan applied");
+    Check(api.Applied == null, "topology changed during validation but operation applied");
 });
 
 string self = Environment.ProcessPath;
@@ -502,5 +585,45 @@ sealed class FakeMonitorConfiguration : IMonitorConfiguration
         message = Succeed ? "done" : "Windows refused the display configuration";
         if (Succeed) Monitors.Single(x => x.DeviceName == name).Attached = connected;
         return Succeed;
+    }
+}
+
+sealed class FakeDisplayApi : DisplayTopology.IApi
+{
+    public DisplayTopology.Snapshot Current, All, Applied;
+    public List<bool> Calls = new();
+    public int Error;
+    public Action AfterValidate;
+    static DisplayTopology.DisplayPath Path(uint source, uint target, bool active = true) => new() {
+        Source = new() { Id = source, ModeIndex = source == 0 ? 0u : 1u },
+        Target = new() { Id = target, Available = 1, ModeIndex = DisplayTopology.InvalidMode }, Flags = active ? 1u : 0u
+    };
+    public FakeDisplayApi()
+    {
+        Current = new() { Paths = [Path(0, 100), Path(1, 102)], Modes = [
+            new() { Type = 1, Id = 0, Data = new() { Width = 1920, Height = 1080, PixelFormat = 4 } },
+            new() { Type = 1, Id = 1, Data = new() { Width = 800, Height = 600, PixelFormat = 4, X = 1920, Y = 500 } }
+        ] };
+        All = new() { Paths = Current.Paths.Concat(Enumerable.Range(2, 6).Select(i => Path((uint)i, 101, false)))
+            .Append(new() { Source = new() { Id = 8 }, Target = new() { Id = 500, Available = 0 } }).ToArray(), Modes = [] };
+    }
+    public DesktopMonitor[] Gdi() => [
+        new() { DeviceName = "DISPLAY1", Primary = true, Attached = true, Bounds = new(0, 0, 1920, 1080) },
+        new() { DeviceName = "DISPLAY2", Attached = true, Bounds = new(1920, 500, 800, 600) },
+        ..Enumerable.Range(3, 7).Select(i => new DesktopMonitor { DeviceName = "DISPLAY" + i })
+    ];
+    public DisplayTopology.Snapshot Query(bool activeOnly) => new() {
+        Paths = (activeOnly ? Current : All).Paths.ToArray(), Modes = (activeOnly ? Current : All).Modes.ToArray()
+    };
+    public string SourceName(DisplayTopology.Source source) => "DISPLAY" + (source.Id + 1);
+    public DisplayTopology.Mode PreferredSource(DisplayTopology.DisplayPath path) => new() {
+        Type = 1, Id = path.Source.Id, Adapter = path.Source.Adapter, Data = new() { Width = 1280, Height = 800, PixelFormat = 4 }
+    };
+    public int Set(DisplayTopology.Snapshot snapshot, bool validate)
+    {
+        Calls.Add(validate);
+        if (validate) AfterValidate?.Invoke();
+        else Applied = snapshot;
+        return Error;
     }
 }

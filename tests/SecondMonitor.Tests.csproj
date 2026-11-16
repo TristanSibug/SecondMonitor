@@ -6,6 +6,7 @@
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../pc/DisplayTopology.cs" Link="DisplayTopology.cs" />
     <Compile Include="../pc/MonitorConnection.cs" Link="MonitorConnection.cs" />
     <Compile Include="../pc/DisplayModes.cs" Link="DisplayModes.cs" />
     <Compile Include="../pc/TouchMessage.cs" Link="TouchMessage.cs" />
