@@ -64,7 +64,13 @@ touchscreen.
 - Works on old tablets: the tablet app supports **Android 5.0+** and uses the hardware decoder
 - Real touchscreen input: Windows sees genuine touches, so swiping scrolls lists and pinching zooms.
   Can be switched to plain mouse mode (single finger = left click and drag)
-- Connect or disconnect the selected secondary Windows display from the PC; open/close the tablet app automatically
+- Connect the virtual monitor when you need it, and disconnect it when you are done.
+  Disconnecting removes it from the active Windows desktop so windows no longer
+  remain on an unused display
+- Automatically reconnect the saved secondary monitor on launch and start streaming
+  after connecting
+- Remember the monitor's resolution and desktop position across disconnects and
+  app restarts
 - A settings window: pick the monitor, resolution, encoder and frame rate. No command line
 - Encoder choices: **CPU (libx264)**, AMD (AMF), Intel (QSV), NVIDIA (NVENC)
 - Screen capture choices: **GPU capture** (ffmpeg `ddagrab`, recommended for the tested setup)
@@ -99,6 +105,13 @@ On the tablet:
 
 ## Install
 
+**Updating from an older version:** right-click the Second Monitor icon in the
+system tray and select **Exit** before updating. Closing the window may leave
+the old version running.
+
+The tablet APK is unchanged in v1.5. If it is already installed on your tablet,
+you do not need to reinstall it.
+
 ### Recommended: setup executable
 
 Use **`SecondMonitorSetup-<version>.exe`** from the [Releases](../../releases) page
@@ -129,41 +142,68 @@ or a dependency installation fails, Setup lists what needs to be installed manua
 
 ## Use
 
-1. Open **Second Monitor** from the Windows Start menu (setup installation), or run
+1. Open **Second Monitor** from the Windows Start menu or run
    `SecondMonitor.exe` from your portable folder.
-2. Pick the virtual monitor (not your main screen), an encoder and your other options.
-3. Press **Start**. While it runs, the program watches for the tablet. When the tablet is plugged in,
-   it sets up the USB tunnel (`adb reverse`) and opens the app on the tablet by itself.
+2. Select your secondary monitor, an encoder and your other options.
+3. If the monitor is disconnected, press **Connect monitor**. Its saved layout
+   is restored, and streaming starts automatically once Windows makes it ready.
+   If it is already connected, press **Start**.
 4. Drag windows onto the extended display.
+5. When you are done, press **Disconnect monitor** to stop streaming and remove
+   the virtual monitor from the active Windows desktop.
 
-Your choices are saved in `%APPDATA%\SecondMonitor\settings.txt`.
-Settings from older versions beside the executable are still read when migrating.
-Beside **Start** and **Stop**, **Connect monitor** / **Disconnect monitor** toggles the
-selected secondary display in Windows. Only active displays and available disconnected monitor targets appear in the selector.
-Disconnect stops streaming first and honors **Close tablet app when stopped**.
-Connect restores that monitor's last resolution and desktop position, then starts streaming
-automatically once Windows makes it ready for capture. Launching the app also reconnects
-the saved secondary monitor if it is disconnected, even when **Start streaming when
-opened** is unchecked. When the monitor is already connected, that checkbox controls
-whether launching the app starts streaming.
-The primary display is protected, and other displays keep their modes and positions.
-This uses Windows DisplayConfig APIs and does not install, enable or disable a driver.
-Automatic tablet opening and closing still follow their checkboxes.
-The last active layouts are saved by monitor identity in
-`%APPDATA%\SecondMonitor\monitor-layouts.json`, including across app restarts.
+While streaming, the program watches for the tablet. With **Open tablet app
+automatically** enabled, it sets up the USB connection and opens the tablet app
+when the tablet is connected and authorized.
+
+### Stop or disconnect?
+
+**Stop** ends streaming while keeping the virtual monitor active in Windows.
+Windows and applications can still use that desktop space.
+
+**Disconnect monitor** stops streaming first, then removes the selected secondary
+display from the active desktop. Windows moves its windows onto the remaining
+displays. In a two-monitor setup, they return to your main monitor. With multiple
+remaining displays, Windows decides where to place them.
+
+Disconnecting does not uninstall or disable the virtual display driver. The
+monitor remains available in the selector so you can reconnect it later.
+
+The primary display is protected, and other active displays keep their existing
+configuration. Automatic tablet opening and closing still follow their checkboxes.
+
+### Remembering your monitor layout
+
+The program remembers each secondary monitor's last active resolution and desktop
+position, including across app restarts.
+
+Set the desired resolution and position in Windows Display settings while Second
+Monitor is running. Subsequent reconnects restore that layout. You can also change
+the selected secondary monitor's resolution using the app's resolution controls.
+
 For a monitor with no saved layout yet, Connect uses its preferred resolution and
-places it beside the rightmost display. Set its desired resolution and position once
-in Windows Display settings while this version is running; subsequent reconnects
-restore them. If Windows refuses a saved layout after the desktop changes, the app
-reports the failure without moving your other displays.
+places it beside the rightmost display. If an older version already lost your
+layout, set it once while v1.5 is running so it can remember it.
 
-Press **Check setup** before streaming to check ffmpeg, the selected encoder, adb authorization,
-the selected monitor, and whether the tablet app is installed. Results appear in the log.
-If USB setup fails, the program retries automatically with a short, increasing delay;
-you do not need to unplug the tablet just to retry.
+Your options are saved in `%APPDATA%\SecondMonitor\settings.txt`.
+Monitor layouts are saved in `%APPDATA%\SecondMonitor\monitor-layouts.json`.
+Settings from older versions beside the executable are still read when migrating.
 
-If the selected monitor is moved or resized while streaming, the program reconnects using
-its new dimensions. If that monitor disappears, it waits for it to return.
+If Windows refuses a saved layout after your desktop configuration changes, the
+program reports the failure rather than changing your other displays.
+
+### Checking your setup
+
+Press **Check setup** to check ffmpeg, the selected encoder, adb authorization,
+the selected monitor, and whether the tablet app is installed. Results appear
+in the log.
+
+If USB setup fails, the program retries automatically with a short, increasing
+delay. You do not need to unplug the tablet just to retry.
+
+If the selected monitor is moved or resized while streaming, the program
+reconnects using its new dimensions. If that monitor disappears, it waits for
+it to return.
 
 ### Recommended settings
 
@@ -184,22 +224,36 @@ the setup tested by the author.
 
 ### Automatic start
 
-Tick these and everything runs by itself:
-1. **Run when Windows starts**: the program starts when you log in to Windows.
-2. **Start streaming when opened**: it starts streaming immediately, no need to press Start.
-3. **Start hidden in the tray**: no window; it lives in the system tray by the clock
-   (double-click the icon to open the window, right-click for Exit).
-4. **Open tablet app automatically**: when the tablet is plugged in, the app opens on it.
+When you launch Second Monitor with your saved secondary monitor disconnected,
+the program reconnects it and starts streaming automatically. This works even
+when **Start streaming when opened** is unchecked.
 
-Then you only plug the tablet in. This needs USB debugging allowed for the PC ("Always allow"),
-and the virtual monitor must already exist when you log in (it is a driver, so it normally does).
-If the tablet's screen is locked, the app opens behind the lock screen; unlock the tablet to see it.
+When the saved monitor is already connected, **Start streaming when opened**
+controls whether launching the app starts streaming.
+
+These settings provide additional automation:
+
+1. **Run when Windows starts:** launch Second Monitor when you log in.
+2. **Start streaming when opened:** start streaming on launch when the selected
+   monitor is already connected.
+3. **Start hidden in the tray:** keep the window hidden and show an icon near
+   the clock. Double-click the icon to show the window, or right-click for Exit.
+4. **Open tablet app automatically:** open the tablet app when the tablet is
+   connected and authorized.
+
+The virtual display driver must be installed, and the saved monitor must be
+available to Windows. USB debugging must be enabled and authorized on the tablet.
+
+If the tablet's screen is locked, the app may open behind the lock screen.
+Unlock the tablet to see it.
 
 ## Options
 
 | Option | What it does |
 |---|---|
-| Monitor | The virtual monitor to send to the tablet (not your main screen). Press Refresh after changing monitors. |
+| Monitor | Select the secondary display to stream. The list includes active displays and available disconnected monitor targets, with unused sources and duplicate entries filtered out. |
+| Connect / Disconnect monitor | Connect restores the selected secondary monitor's saved layout and starts streaming. Disconnect stops streaming and removes that monitor from the active desktop. The primary display is protected. |
+| Start / Stop | Start begins streaming from a connected monitor. Stop ends streaming while keeping the monitor active in Windows. |
 | Monitor resolution | Changes the virtual monitor's resolution (Apply, or automatically on Start). It lists only modes the virtual display driver offers, up to 60 Hz. Never changes your main screen. |
 | Video encoder | **CPU (libx264)** works everywhere and had the lowest delay. **AMD / Intel / NVIDIA** use the graphics card, which takes load off the CPU but may add delay. |
 | Screen capture | **GPU capture** is recommended for the tested setup and lets ffmpeg capture the screen with the graphics card. **Standard** takes screenshots in the program and is the compatibility fallback. |
@@ -210,10 +264,10 @@ If the tablet's screen is locked, the app opens behind the lock screen; unlock t
 | Lower priority | Windows gives a game the CPU first. The tablet video may stutter a little instead. |
 | Show FPS number | Shows frames per second in the window. Off is smoothest. |
 | Open tablet app automatically | When the tablet is plugged in, opens the app on it using adb. If you rename the Android package, change `TabletAppComponent` in `StreamEngine.cs`. |
-| Close tablet app when stopped | Closes the app on the tablet when you press Stop or exit the program. |
+| Close tablet app when stopped | Closes the tablet app when you stop streaming, disconnect the monitor, or exit the program. |
 | Real touchscreen input | Sends genuine touch input to Windows (swipe to scroll, pinch to zoom). Unticked, one finger acts as the mouse. If Windows refuses touch input, the program falls back to mouse mode by itself. |
 | Run when Windows starts | Adds the program to your Windows startup list (your user account only). |
-| Start streaming when opened | Starts streaming as soon as the program opens. |
+| Start streaming when opened | Starts streaming on launch when the selected monitor is already connected. A disconnected saved secondary monitor reconnects and starts streaming automatically regardless of this setting. |
 | Start hidden in the tray | Opens without a window, as an icon in the system tray. |
 | Keep running in tray when closed | The X button hides the window instead of exiting. Use Exit in the tray menu to really quit. |
 
@@ -257,6 +311,17 @@ Development checks and a Windows/tablet validation checklist are documented in
 
 ## Troubleshooting
 
+- **The old buttons still appear after updating:** exit Second Monitor using
+  its tray menu, then launch the updated executable. Opening another copy
+  brings the existing instance forward instead of replacing it.
+- **Windows remain on an unused virtual desktop after Stop:** Stop keeps the
+  monitor active. Use **Disconnect monitor** to remove it from the active desktop.
+- **The monitor reconnects with the wrong layout:** set its desired resolution
+  and position in Windows Display settings while v1.5 is running, then disconnect
+  and reconnect it.
+- **Connecting the monitor fails:** read the Windows DisplayConfig error in the
+  log. Confirm the monitor is available in Windows Display settings, press
+  **Refresh**, and select the intended secondary display.
 - **`Could not start ffmpeg`**: ffmpeg isn't installed or isn't found. Put `ffmpeg.exe` next to `SecondMonitor.exe` or in PATH.
 - **`Could not run adb`**: Android platform-tools isn't in your PATH.
 - **`Could not open port 7777`**: another copy of the program is still running.
