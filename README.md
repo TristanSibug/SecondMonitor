@@ -64,7 +64,7 @@ touchscreen.
 - Works on old tablets: the tablet app supports **Android 5.0+** and uses the hardware decoder
 - Real touchscreen input: Windows sees genuine touches, so swiping scrolls lists and pinching zooms.
   Can be switched to plain mouse mode (single finger = left click and drag)
-- Open and close the tablet app from the PC, by a button or automatically
+- Connect or disconnect the selected secondary Windows display from the PC; open/close the tablet app automatically
 - A settings window: pick the monitor, resolution, encoder and frame rate. No command line
 - Encoder choices: **CPU (libx264)**, AMD (AMF), Intel (QSV), NVIDIA (NVENC)
 - Screen capture choices: **GPU capture** (ffmpeg `ddagrab`, recommended for the tested setup)
@@ -138,7 +138,13 @@ or a dependency installation fails, Setup lists what needs to be installed manua
 
 Your choices are saved in `%APPDATA%\SecondMonitor\settings.txt`.
 Settings from older versions beside the executable are still read when migrating.
-**Open tablet app** and **Close tablet app** open and close the app on the tablet by hand.
+Beside **Start** and **Stop**, **Connect monitor** / **Disconnect monitor** toggles the
+selected secondary display in Windows. Disconnected displays remain in the selector.
+Disconnect stops streaming first and honors **Close tablet app when stopped**.
+Connect extends the desktop beside the rightmost active display; press **Start** to stream.
+The primary display is protected, and other displays keep their modes and positions.
+This uses Windows display settings APIs and does not install, enable or disable a driver.
+Automatic tablet opening and closing still follow their checkboxes.
 
 Press **Check setup** before streaming to check ffmpeg, the selected encoder, adb authorization,
 the selected monitor, and whether the tablet app is installed. Results appear in the log.

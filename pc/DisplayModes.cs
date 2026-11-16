@@ -36,6 +36,13 @@ class ModeInfo
     }
 }
 
+sealed class WindowsMonitorConfiguration : IMonitorConfiguration
+{
+    public DesktopMonitor[] List() { return DisplayModes.ListMonitors(); }
+    public bool SetConnected(string name, bool connected, out string message)
+    { return DisplayModes.SetConnected(name, connected, out message); }
+}
+
 static class DisplayModes
 {
     // ------------------------------------------------------------------
@@ -87,9 +94,112 @@ static class DisplayModes
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     static extern int ChangeDisplaySettingsEx(string deviceName, ref DEVMODE devMode, IntPtr hwnd, uint flags, IntPtr lParam);
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct DISPLAY_DEVICE
+    {
+        public uint cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
+        public uint StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    static extern bool EnumDisplayDevices(string device, uint index, ref DISPLAY_DEVICE display, uint flags);
+
+    static readonly Dictionary<string, DEVMODE> disconnectedModes = new Dictionary<string, DEVMODE>();
+
+    public static DesktopMonitor[] ListMonitors()
+    {
+        var monitors = new List<DesktopMonitor>();
+        for (uint i = 0; ; i++)
+        {
+            var device = new DISPLAY_DEVICE { cb = (uint)Marshal.SizeOf<DISPLAY_DEVICE>() };
+            if (!EnumDisplayDevices(null, i, ref device, 0)) break;
+            if ((device.StateFlags & 8) != 0) continue; // Mirroring pseudo-driver.
+            bool attached = (device.StateFlags & 1) != 0;
+            DEVMODE mode = NewDevMode();
+            if (!EnumDisplaySettings(device.DeviceName, attached ? -1 : -2, ref mode))
+                EnumDisplaySettings(device.DeviceName, 0, ref mode);
+            monitors.Add(new DesktopMonitor {
+                DeviceName = device.DeviceName, Attached = attached,
+                Primary = (device.StateFlags & 4) != 0,
+                Bounds = new System.Drawing.Rectangle(mode.dmPositionX, mode.dmPositionY,
+                    (int)mode.dmPelsWidth, (int)mode.dmPelsHeight)
+            });
+        }
+        return monitors.ToArray();
+    }
+
+    public static bool SetConnected(string name, bool connect, out string message)
+    {
+        DesktopMonitor selected = null;
+        DesktopMonitor[] monitors = ListMonitors();
+        foreach (var monitor in monitors) if (monitor.DeviceName == name) selected = monitor;
+        if (selected == null || selected.Primary || selected.Attached == connect)
+        {
+            message = "The selected secondary display is no longer available in the expected state.";
+            return false;
+        }
+        DEVMODE mode = NewDevMode();
+        if (connect)
+        {
+            if (!disconnectedModes.TryGetValue(name, out mode))
+            {
+                mode = NewDevMode();
+                if (!EnumDisplaySettings(name, -2, ref mode) || mode.dmPelsWidth == 0 || mode.dmPelsHeight == 0)
+                {
+                    mode = NewDevMode();
+                    if (!EnumDisplaySettings(name, 0, ref mode))
+                    {
+                        message = "Windows does not offer a mode for this disconnected display.";
+                        return false;
+                    }
+                }
+            }
+            // Extend beside the existing desktop; never move or reset its displays.
+            var position = MonitorConnection.ConnectionPosition(monitors);
+            mode.dmPositionX = position.X;
+            mode.dmPositionY = position.Y;
+            mode.dmFields = DM_POSITION | DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY | DM_BITSPERPEL;
+        }
+        else
+        {
+            if (!EnumDisplaySettings(name, ENUM_CURRENT_SETTINGS, ref mode))
+            {
+                message = "Could not read the selected display's current mode.";
+                return false;
+            }
+            disconnectedModes[name] = mode;
+            mode.dmFields = DM_POSITION | DM_PELSWIDTH | DM_PELSHEIGHT;
+            mode.dmPelsWidth = mode.dmPelsHeight = 0;
+        }
+        int result = ChangeDisplaySettingsEx(name, ref mode, IntPtr.Zero, CDS_TEST, IntPtr.Zero);
+        if (result == 0)
+        {
+            // A mode test may take time; do not change a display promoted to
+            // primary (or removed) while Windows was checking the request.
+            bool stillSecondary = false;
+            foreach (var monitor in ListMonitors())
+                if (monitor.DeviceName == name && !monitor.Primary && monitor.Attached != connect)
+                    stillSecondary = true;
+            if (!stillSecondary)
+            {
+                message = "The display configuration changed. Refresh and try again.";
+                return false;
+            }
+            result = ChangeDisplaySettingsEx(name, ref mode, IntPtr.Zero, CDS_UPDATEREGISTRY, IntPtr.Zero);
+        }
+        message = result == 0 ? (connect ? "Monitor connected." : "Monitor disconnected.") :
+            "Windows refused to " + (connect ? "connect" : "disconnect") + " this display (code " + result + ").";
+        return result == 0;
+    }
+
     // Numbers Windows understands
     const int ENUM_CURRENT_SETTINGS = -1;     // "tell me the mode it is using right now"
     const uint DM_POSITION = 0x00000020;      // the position fields are filled in
+    const uint DM_BITSPERPEL = 0x00040000;    // colour depth
     const uint DM_PELSWIDTH = 0x00080000;     // the width field is filled in
     const uint DM_PELSHEIGHT = 0x00100000;    // the height field is filled in
     const uint DM_DISPLAYFREQUENCY = 0x00400000; // the refresh rate field is filled in

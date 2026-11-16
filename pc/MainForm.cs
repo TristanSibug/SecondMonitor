@@ -56,8 +56,11 @@ class MainForm : Form
     Button checkSetupButton;
     Button startButton;
     Button stopButton;
-    Button openTabletButton;      // button: open the app on the tablet now
-    Button closeTabletButton;     // button: close the app on the tablet now
+    Button monitorToggleButton;
+    readonly IMonitorConfiguration monitorConfiguration = new WindowsMonitorConfiguration();
+    readonly CancellationTokenSource displayChanges = new CancellationTokenSource();
+    bool changingMonitor;
+    bool stopping;
     Label statusLabel;
     Label statsLabel;
     TextBox logBox;               // the big text area at the bottom
@@ -66,7 +69,7 @@ class MainForm : Form
     NotifyIcon trayIcon;
 
     // The monitors Windows knows about (filled by FillMonitorList)
-    Screen[] screens;
+    DesktopMonitor[] screens;
 
     // true while the engine is streaming (the option controls are locked then)
     bool isRunningNow = false;
@@ -147,7 +150,7 @@ class MainForm : Form
         engine.Stats += delegate (string message) { RunOnUi(delegate { statsLabel.Text = message; }); };
 
         FormClosing += OnFormClosing;
-        displayChangedHandler = delegate { RunOnUi(delegate { engine.DisplayChanged(); }); };
+        displayChangedHandler = delegate { RunOnUi(delegate { engine.DisplayChanged(); RefreshMonitors(); }); };
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged += displayChangedHandler;
 
         // Windows tells us BEFORE it shuts down or logs off. React at once: stop using adb
@@ -280,17 +283,11 @@ class MainForm : Form
         stopButton.Click += OnStopClicked;
         Controls.Add(stopButton);
 
-        openTabletButton = new Button();
-        openTabletButton.Text = "Open tablet app";
-        openTabletButton.SetBounds(212, 430, 160, 32);
-        openTabletButton.Click += OnOpenTabletClicked;
-        Controls.Add(openTabletButton);
-
-        closeTabletButton = new Button();
-        closeTabletButton.Text = "Close tablet app";
-        closeTabletButton.SetBounds(384, 430, 160, 32);
-        closeTabletButton.Click += OnCloseTabletClicked;
-        Controls.Add(closeTabletButton);
+        monitorToggleButton = new Button();
+        monitorToggleButton.Text = "Connect monitor";
+        monitorToggleButton.SetBounds(212, 430, 200, 32);
+        monitorToggleButton.Click += OnMonitorToggleClicked;
+        Controls.Add(monitorToggleButton);
 
         statusLabel = new Label();
         statusLabel.Text = "Status: Stopped";
@@ -454,14 +451,15 @@ class MainForm : Form
     // ==================================================================
     void FillMonitorList()
     {
-        screens = Screen.AllScreens;
+        screens = monitorConfiguration.List();
         monitorBox.Items.Clear();
 
         for (int i = 0; i < screens.Length; i++)
         {
-            Screen s = screens[i];
+            DesktopMonitor s = screens[i];
             string name = "[" + i + "] " + s.DeviceName.Replace("\\\\.\\", "")
                 + "  " + s.Bounds.Width + "x" + s.Bounds.Height;
+            if (!s.Attached) name += "  (disconnected)";
             if (s.Primary) name += "  (main screen)";
             monitorBox.Items.Add(name);
         }
@@ -529,6 +527,7 @@ class MainForm : Form
         // Find the same monitor again by its Windows name
         if (keepName != null)
         {
+            monitorBox.SelectedIndex = -1;
             for (int i = 0; i < screens.Length; i++)
             {
                 if (screens[i].DeviceName == keepName)
@@ -542,6 +541,7 @@ class MainForm : Form
         FillResolutionList();
         SelectResolutionByKey(keepKey);
         loading = false;
+        UpdateMonitorControls();
     }
 
     // ==================================================================
@@ -555,7 +555,7 @@ class MainForm : Form
 
         if (screens != null && monitorBox.SelectedIndex >= 0 && monitorBox.SelectedIndex < screens.Length)
         {
-            Screen s = screens[monitorBox.SelectedIndex];
+            DesktopMonitor s = screens[monitorBox.SelectedIndex];
             foreach (ModeInfo mode in DisplayModes.List(s.DeviceName))
             {
                 resolutionBox.Items.Add(mode);
@@ -586,10 +586,10 @@ class MainForm : Form
     // selected monitor is NOT your main screen (we never change your main screen).
     void UpdateResolutionControls()
     {
-        bool canChange = !isRunningNow;
+        bool canChange = !isRunningNow && !changingMonitor && !stopping && monitorBox.SelectedIndex >= 0;
 
         if (screens != null && monitorBox.SelectedIndex >= 0 && monitorBox.SelectedIndex < screens.Length
-            && screens[monitorBox.SelectedIndex].Primary)
+            && (screens[monitorBox.SelectedIndex].Primary || !screens[monitorBox.SelectedIndex].Attached))
         {
             canChange = false;
         }
@@ -603,6 +603,7 @@ class MainForm : Form
     {
         if (loading) return;
         FillResolutionList();
+        UpdateMonitorControls();
     }
 
     // ==================================================================
@@ -624,10 +625,10 @@ class MainForm : Form
             return false;
         }
 
-        Screen s = screens[monitorBox.SelectedIndex];
-        if (s.Primary)
+        DesktopMonitor s = screens[monitorBox.SelectedIndex];
+        if (s.Primary || !s.Attached)
         {
-            AppendLog("That is your main screen. This program only changes the virtual monitor.");
+            AppendLog("Select a connected secondary monitor. The primary display is protected.");
             return false;
         }
 
@@ -741,9 +742,24 @@ class MainForm : Form
         closeToTrayCheck.Enabled = !isRunning;
         startButton.Enabled = !isRunning;
         stopButton.Enabled = isRunning;
+        UpdateMonitorControls();
         UpdateResolutionControls(); // resolution controls also depend on the main-screen check
 
         if (!isRunning) statsLabel.Text = "";
+    }
+
+    void UpdateMonitorControls()
+    {
+        DesktopMonitor selected = screens != null && monitorBox.SelectedIndex >= 0 && monitorBox.SelectedIndex < screens.Length
+            ? screens[monitorBox.SelectedIndex] : null;
+        bool busy = changingMonitor || stopping;
+        monitorToggleButton.Text = selected != null && selected.Attached ? "Disconnect monitor" : "Connect monitor";
+        monitorToggleButton.Enabled = !busy && !checkingSetup && selected != null && !selected.Primary && !ShutdownGuard.IsShuttingDown;
+        startButton.Enabled = !busy && !isRunningNow && selected != null && selected.Attached;
+        stopButton.Enabled = !busy && isRunningNow;
+        monitorBox.Enabled = !busy && !isRunningNow;
+        refreshButton.Enabled = !busy && !isRunningNow;
+        checkSetupButton.Enabled = !busy && !checkingSetup && !isRunningNow;
     }
 
     // ==================================================================
@@ -753,6 +769,7 @@ class MainForm : Form
     // ==================================================================
     void TryStart(bool interactive)
     {
+        if (changingMonitor || stopping || ShutdownGuard.IsShuttingDown) return;
         if (screens == null || monitorBox.SelectedIndex < 0 || monitorBox.SelectedIndex >= screens.Length)
         {
             if (interactive)
@@ -769,7 +786,14 @@ class MainForm : Form
         ReadControlsIntoSettings();
         settings.Save(); // remember these choices for next time
 
-        Screen chosen = screens[monitorBox.SelectedIndex];
+        DesktopMonitor chosen = screens[monitorBox.SelectedIndex];
+        Screen active = Array.Find(Screen.AllScreens, screen => screen.DeviceName == chosen.DeviceName);
+        if (!chosen.Attached || active == null)
+        {
+            AppendLog("Connect the selected monitor before starting streaming.");
+            RefreshMonitors();
+            return;
+        }
 
         // If you picked a resolution, set it first (only when it differs from the current one)
         ModeInfo wanted = resolutionBox.SelectedItem as ModeInfo;
@@ -779,7 +803,8 @@ class MainForm : Form
             if (current == null || current.Key != wanted.Key)
             {
                 if (!ApplySelectedResolution()) return; // it already wrote the reason in the log
-                chosen = screens[monitorBox.SelectedIndex]; // the lists were refreshed
+                active = Array.Find(Screen.AllScreens, screen => screen.DeviceName == chosen.DeviceName);
+                if (active == null) { AppendLog("The selected monitor is no longer connected."); return; }
             }
         }
 
@@ -788,7 +813,7 @@ class MainForm : Form
             AppendLog("Note: you picked your MAIN screen, so the tablet will just mirror it.");
         }
 
-        bool started = engine.Start(settings, new MonitorTarget(chosen.DeviceName, chosen.Bounds));
+        bool started = engine.Start(settings, new MonitorTarget(chosen.DeviceName, active.Bounds));
         SetRunning(started);
     }
 
@@ -803,12 +828,12 @@ class MainForm : Form
         foreach (Screen screen in Screen.AllScreens)
             if (screen.DeviceName == snapshot.MonitorName) available = true;
         checkingSetup = true;
-        checkSetupButton.Enabled = false;
+        UpdateMonitorControls();
         Thread worker = new Thread(delegate ()
         {
             try { engine.CheckSetup(snapshot, available); }
             catch (Exception ex) { RunOnUi(delegate { AppendLog("Setup check failed: " + ex.Message); }); }
-            finally { RunOnUi(delegate { checkingSetup = false; checkSetupButton.Enabled = !isRunningNow; }); }
+            finally { RunOnUi(delegate { checkingSetup = false; UpdateMonitorControls(); }); }
         });
         worker.IsBackground = true;
         worker.Start();
@@ -819,36 +844,65 @@ class MainForm : Form
         TryStart(true);
     }
 
+    void StopStreaming(bool closeTablet)
+    {
+        if (closeTablet) engine.SayGoodbye();
+        engine.Stop();
+        if (closeTablet) engine.CloseTabletApp();
+    }
+
     async void OnStopClicked(object sender, EventArgs e)
     {
+        if (stopping || changingMonitor) return;
         bool closeTablet = closeTabletCheck.Checked;
-        stopButton.Enabled = false;
+        stopping = true;
+        UpdateMonitorControls();
+        UpdateResolutionControls();
         statusLabel.Text = "Status: Stopping...";
+        bool stopped = false;
         try
         {
-            await Task.Run(delegate
-            {
-                if (closeTablet) engine.SayGoodbye();
-                engine.Stop();
-                if (closeTablet) engine.CloseTabletApp();
-            });
+            await Task.Run(() => StopStreaming(closeTablet));
+            stopped = true;
         }
         catch (Exception ex) { if (!IsDisposed) AppendLog("Stop failed: " + ex.Message); }
-        finally { if (!IsDisposed) SetRunning(false); }
+        finally
+        {
+            stopping = false;
+            if (!IsDisposed) SetRunning(stopped ? false : isRunningNow);
+        }
     }
 
-    void OnOpenTabletClicked(object sender, EventArgs e)
+    async void OnMonitorToggleClicked(object sender, EventArgs e)
     {
-        Thread worker = new Thread(delegate () { engine.OpenTabletApp(); });
-        worker.IsBackground = true;
-        worker.Start();
-    }
-
-    void OnCloseTabletClicked(object sender, EventArgs e)
-    {
-        Thread worker = new Thread(delegate () { engine.CloseTabletApp(); });
-        worker.IsBackground = true;
-        worker.Start();
+        if (changingMonitor || stopping || checkingSetup || ShutdownGuard.IsShuttingDown ||
+            monitorBox.SelectedIndex < 0 || monitorBox.SelectedIndex >= screens.Length) return;
+        string name = screens[monitorBox.SelectedIndex].DeviceName;
+        bool closeTablet = closeTabletCheck.Checked;
+        bool stopped = false;
+        changingMonitor = true;
+        UpdateMonitorControls();
+        UpdateResolutionControls();
+        try
+        {
+            string message = await Task.Run(() =>
+            {
+                var connection = new MonitorConnection(monitorConfiguration);
+                connection.Toggle(name, () => { StopStreaming(closeTablet); stopped = true; }, out string detail, displayChanges.Token);
+                return detail;
+            });
+            if (!IsDisposed) AppendLog(message);
+        }
+        catch (Exception ex) { if (!IsDisposed) AppendLog("Display change failed: " + ex.Message); }
+        finally
+        {
+            changingMonitor = false;
+            if (!IsDisposed)
+            {
+                SetRunning(stopped ? false : isRunningNow);
+                RefreshMonitors();
+            }
+        }
     }
 
     protected override void WndProc(ref Message message)
@@ -871,6 +925,8 @@ class MainForm : Form
             Hide();
             return;
         }
+
+        displayChanges.Cancel();
 
         // Really closing: remember the options and shut everything down
         if (monitorBox.SelectedIndex >= 0 && encoderBox.SelectedIndex >= 0)

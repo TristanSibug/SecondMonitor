@@ -84,8 +84,36 @@ authorized USB-connected tablet running the existing APK.
    over the existing connection, or close after its existing 10-second disconnect
    timeout if Windows terminates the adb tunnel first. No APK update is needed.
 
-Both Windows publish modes and all 22 regression/integration tests passed in the
-Linux environment using .NET SDK 10.0.403 and ffmpeg 7.1.5. The Windows GUI,
+## Monitor connection toggle
+
+The Linux suite also exercises secondary-only selection, stopping before disconnect,
+reconnecting the same device, failures to stop, topology changes during stop, shutdown,
+closing cancellation, Windows refusal, and placement next to an offset desktop.
+The native Windows display APIs are compiled but cannot be executed on Linux.
+
+On Windows, use at least three displays (including the primary) and record their
+positions, sizes and primary designation before testing:
+
+1. The old tablet buttons are replaced by one **Connect monitor** / **Disconnect
+   monitor** button beside **Start** and **Stop**. Selecting the primary disables
+   the toggle. Disconnect a secondary while streaming: confirm streaming stops
+   before it leaves the desktop and the close-tablet checkbox is honored.
+2. Confirm the detached device remains selected/listed, **Start** and resolution
+   changes are disabled for it, and **Connect monitor** restores it beside the
+   rightmost active display. Confirm every other display retains its original
+   mode, position and primary designation. Repeat with negative coordinates and
+   a rightmost display above/below the primary.
+3. Restart the app while the secondary is disconnected, reconnect it, then press
+   **Start**. Confirm automatic tablet opening still follows its checkbox. Repeat
+   Stop/disconnect with automatic closing checked and unchecked.
+4. Change the primary or unplug the selected display while Stop is pending.
+   Confirm the operation refuses a newly primary/missing device and never
+   substitutes another display. Test Windows refusal and shutdown/logoff during
+   Stop: no queued connection operation or adb launch should start afterward.
+
+Both Windows publish modes and all 28 regression/integration tests passed in the
+Linux environment using .NET SDK 10.0.403 and ffmpeg 7.1.5. The six monitor tests
+exercise policy, ordering and placement using a simulated display configuration. The Windows GUI,
 USB hardware, display changes, actual Windows shutdown/logoff messages, and hardware
 encoders have not been runtime-tested there. Session-message tests simulate the
 notification values, and the helper cancellation test uses a local test process.

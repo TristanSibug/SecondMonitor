@@ -189,6 +189,84 @@ Test("AVI rejects truncated or oversized output", () =>
     Throws<InvalidDataException>(() => new AviFrameReader(new MemoryStream(oversized)).ReadFrame());
 });
 
+Test("monitor toggle protects the primary display and missing selections", () =>
+{
+    var config = new FakeMonitorConfiguration();
+    var toggle = new MonitorConnection(config);
+    foreach (string name in new[] { "primary", "missing" })
+        Check(!toggle.Toggle(name, () => throw new Exception("stopped for protected selection"), out _), "unsafe selection accepted");
+    Check(config.Changes.Count == 0, "changed a protected display");
+});
+Test("monitor disconnect waits for streaming to stop and preserves other displays", () =>
+{
+    var config = new FakeMonitorConfiguration();
+    var engine = new StreamEngine(_ => new FakeSession(null));
+    engine.Start(new AppSettings(), default);
+    using var stopped = new ManualResetEventSlim();
+    using var release = new ManualResetEventSlim();
+    var action = Task.Run(() => new MonitorConnection(config).Toggle("secondary", () =>
+    {
+        engine.Stop(); stopped.Set();
+        if (!release.Wait(3000)) throw new Exception("stop not released");
+    }, out _));
+    try
+    {
+        Check(stopped.Wait(2000), "stop not entered");
+        Check(config.Changes.Count == 0, "detached before stop completed");
+    }
+    finally { release.Set(); }
+    Check(action.Wait(2000) && action.Result, "disconnect failed");
+    Check(config.Changes.SequenceEqual(new[] { "secondary:False" }), "wrong display changed");
+    Check(config.Monitors[0].Attached && config.Monitors[0].Primary && config.Monitors[2].Attached,
+        "other displays changed");
+    Check(new MonitorConnection(config).Toggle("secondary", () => throw new Exception("connect stopped streaming"), out _), "reconnect failed");
+    Check(config.Changes.Last() == "secondary:True", "wrong reconnect target");
+});
+Test("failed stop and changed topology abort monitor disconnect", () =>
+{
+    var config = new FakeMonitorConfiguration();
+    var toggle = new MonitorConnection(config);
+    Throws<InvalidOperationException>(() => toggle.Toggle("secondary", () => throw new InvalidOperationException(), out _));
+    Check(config.Changes.Count == 0, "detached despite stop failure");
+    Check(!toggle.Toggle("secondary", () => config.Monitors[1].Primary = true, out _), "detached new primary");
+    Check(config.Changes.Count == 0, "new primary changed");
+    config.Monitors[1].Primary = false;
+    Check(!toggle.Toggle("secondary", () => config.Monitors = [config.Monitors[0], config.Monitors[2]], out _), "substituted another display");
+    Check(config.Changes.Count == 0, "changed a different display");
+});
+Test("shutdown and cancellation while stopping prevent display changes", () =>
+{
+    var config = new FakeMonitorConfiguration();
+    try
+    {
+        Check(!new MonitorConnection(config).Toggle("secondary", ShutdownGuard.BeginShutdown, out _), "detached during shutdown");
+        Check(config.Changes.Count == 0, "shutdown bypassed");
+    }
+    finally { ShutdownGuard.ObserveWindowMessage(0x0016, IntPtr.Zero); }
+    using var cancel = new CancellationTokenSource();
+    Check(!new MonitorConnection(config).Toggle("secondary", cancel.Cancel, out _, cancel.Token), "detached after closing");
+    Check(config.Changes.Count == 0, "cancellation bypassed");
+});
+Test("connecting extends the existing desktop without moving other displays", () =>
+{
+    var monitors = new DesktopMonitor[] {
+        new() { DeviceName = "primary", Primary = true, Attached = true, Bounds = new(0, 0, 1920, 1080) },
+        new() { DeviceName = "left", Attached = true, Bounds = new(-1280, -200, 1280, 720) },
+        new() { DeviceName = "right", Attached = true, Bounds = new(1920, 500, 800, 600) },
+        new() { DeviceName = "detached", Bounds = new(9000, 0, 1000, 1000) }
+    };
+    var before = monitors.Select(m => m.Bounds).ToArray();
+    Check(MonitorConnection.ConnectionPosition(monitors) == new System.Drawing.Point(2720, 500), "new display not adjacent to rightmost active display");
+    Check(monitors.Select(m => m.Bounds).SequenceEqual(before), "existing positions or sizes modified");
+});
+Test("Windows display refusal is reported without claiming a connection", () =>
+{
+    var config = new FakeMonitorConfiguration { Succeed = false };
+    config.Monitors[1].Attached = false;
+    Check(!new MonitorConnection(config).Toggle("secondary", () => { }, out var message), "failure reported as success");
+    Check(message.Contains("refused") && !config.Monitors[1].Attached, "failure state lost");
+});
+
 string self = Environment.ProcessPath;
 // Support both 'dotnet tests.dll' and the default apphost created by dotnet run.
 string childPrefix = Path.GetFileNameWithoutExtension(self).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
@@ -406,4 +484,23 @@ sealed class FakeSession(string serial) : IStreamSession
     public void DisplayChanged() => DisplayChanges++;
     public bool OpenTabletApp() => true;
     public void CloseTabletApp() => ClosedTablet = true;
+}
+
+sealed class FakeMonitorConfiguration : IMonitorConfiguration
+{
+    public DesktopMonitor[] Monitors = [
+        new() { DeviceName = "primary", Primary = true, Attached = true },
+        new() { DeviceName = "secondary", Attached = true },
+        new() { DeviceName = "other", Attached = true }
+    ];
+    public List<string> Changes = new();
+    public bool Succeed = true;
+    public DesktopMonitor[] List() => Monitors;
+    public bool SetConnected(string name, bool connected, out string message)
+    {
+        Changes.Add(name + ":" + connected);
+        message = Succeed ? "done" : "Windows refused the display configuration";
+        if (Succeed) Monitors.Single(x => x.DeviceName == name).Attached = connected;
+        return Succeed;
+    }
 }
