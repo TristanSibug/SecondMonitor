@@ -1,0 +1,77 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/windows-installer.yml
+      - pc/**
+      - installer/**
+      - tests/**
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.403'
+
+      - name: Run Windows regression tests
+        run: dotnet run --project tests/SecondMonitor.Tests.csproj -c Release
+
+      - name: Publish the Windows app
+        run: dotnet publish pc/SecondMonitorServer.csproj -c Release -r win-x64 --self-contained false -o app
+
+      - name: Download the released tablet app
+        shell: pwsh
+        run: |
+          # The Windows installer bundles the unchanged v1.5 tablet app.
+          $apk = 'installer/SecondMonitor.apk'
+          Invoke-WebRequest -Uri 'https://github.com/TristanSibug/SecondMonitor/releases/download/v1.5.0/SecondMonitor.apk' -OutFile $apk
+          if ((Get-FileHash -Path $apk -Algorithm SHA256).Hash -ne '32236cb3ad7a05fd6bb2bdc9a475095882bdd88b0856494c6beabd080cb051c2') {
+            throw 'The released tablet APK failed SHA-256 verification.'
+          }
+
+      - name: Install Inno Setup 7
+        shell: pwsh
+        run: |
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.1-x64.exe'
+          $compilerDir = Join-Path $env:RUNNER_TEMP 'inno-setup-7'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe' -OutFile $setup
+          if ((Get-FileHash -Path $setup -Algorithm SHA256).Hash -ne '8a5a6711c3766a6e5fb74f280ba0e3551e719ce94538d901fdbd1f8f9920b3f0') {
+            throw 'The Inno Setup installer failed SHA-256 verification.'
+          }
+
+          $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="{0}"' -f $compilerDir
+          $result = Start-Process -FilePath $setup -ArgumentList $arguments -Wait -PassThru
+          $compiler = Join-Path $compilerDir 'ISCC.exe'
+          if ($result.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+            throw "Inno Setup installation failed (exit code $($result.ExitCode))."
+          }
+          "ISCC=$compiler" >> $env:GITHUB_ENV
+
+      - name: Build the unsigned installer
+        shell: pwsh
+        run: |
+          & $env:ISCC installer/SecondMonitor.iss
+          exit $LASTEXITCODE
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: SecondMonitor-Windows-x64-unsigned
+          path: installer/output/SecondMonitorSetup-*.exe
+          if-no-files-found: error
