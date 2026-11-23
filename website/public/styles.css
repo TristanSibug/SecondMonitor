@@ -99,7 +99,7 @@ p { margin: 0; }
 }
 
 .nav-links a { text-decoration: none; }
-.nav-links a:hover, .brand:hover { text-decoration: underline; }
+.nav-links a:hover, .brand:hover, .nav-links [aria-current="page"] { text-decoration: underline; }
 .nav-links .github-link {
   padding-inline: 0.85rem;
   border: 1px solid var(--line);
@@ -294,16 +294,28 @@ h3 { margin: 0; font-size: 1.05rem; line-height: 1.35; }
   display: grid;
   justify-items: center;
   gap: 0.85rem;
-  padding: clamp(1rem, 3vw, 2.25rem);
+  padding: clamp(0.75rem, 2vw, 1.5rem);
   border: 1px solid #597466;
   border-radius: 1rem;
   background: #264738;
 }
 
 .app-figure img {
-  width: min(100%, 17rem);
+  width: min(100%, 25rem);
   border-radius: 0.45rem;
   box-shadow: 0 1rem 2rem #101d1877;
+}
+
+@media (hover: hover) {
+  .app-figure:hover {
+    background: #2d5141;
+    border-color: #8ea99a;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .app-figure img { transition: transform 200ms ease; }
+    .app-figure:hover img { transform: scale(1.025); }
+  }
 }
 
 .app-figure figcaption { color: #d4e2d9; font-size: 0.8rem; text-align: center; }
@@ -336,17 +348,88 @@ details p { max-width: 54ch; padding-block: 0 1rem; color: var(--muted); }
 
 .footer-links { display: flex; flex-wrap: wrap; gap: 0 1.25rem; }
 
+.content-page { padding-block: clamp(2.75rem, 6vw, 5.5rem); }
+
+.page-intro { margin-block-end: clamp(2rem, 5vw, 3.5rem); }
+.page-intro .lede { max-width: 52ch; }
+.content-page h2 { font-size: clamp(2.1rem, 4vw, 3.4rem); }
+.content-page p:not(.eyebrow, .lede, .file-info) { max-width: 65ch; }
+
+.download-primary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem 2rem;
+  padding: clamp(1.25rem, 4vw, 2.75rem);
+  border-radius: 1rem;
+  background: var(--forest);
+  color: var(--paper);
+}
+
+.download-primary .eyebrow { color: var(--lime); margin-block-end: 0.75rem; }
+.download-primary h2 { margin-block-end: 0.65rem; }
+.download-primary p { color: #d4e2d9; }
+.download-primary .button:focus-visible { outline-color: var(--paper); }
+.file-info { color: var(--muted); font-size: 0.82rem; }
+.download-action .file-info { margin-block-start: 0.45rem; }
+
+.download-options { margin-block: clamp(2rem, 5vw, 3.5rem); }
+.download-options > p { margin-block-start: 0.65rem; color: var(--muted); }
+
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-block: 1.15rem 0.5rem;
+}
+
+.download-grid h3 { margin-block-start: 0; }
+
+.guide-layout {
+  display: grid;
+  grid-template-columns: minmax(11rem, 1fr) minmax(0, 3.1fr);
+  align-items: start;
+  gap: 1.75rem clamp(2rem, 5vw, 4.5rem);
+}
+
+.guide-nav {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: #fcfcf7;
+}
+
+.guide-nav p { font-weight: 750; }
+.guide-nav ul { margin: 0.35rem 0 0; padding: 0; list-style: none; }
+.guide-nav a { display: flex; align-items: center; min-block-size: 44px; font-size: 0.93rem; }
+
+.guide-content { max-width: 71ch; }
+.guide-content section + section {
+  border-top: 1px solid var(--line);
+  padding-block-start: 1.75rem;
+  margin-block-start: 1.75rem;
+}
+
+.guide-content h2 { margin-block-end: 0.85rem; text-wrap: wrap; }
+.guide-content ol, .guide-content ul { padding-inline-start: 1.45rem; }
+.guide-content li + li { margin-block-start: 0.55rem; }
+.guide-content code { overflow-wrap: anywhere; }
+.guide-problems dt { font-weight: 750; }
+.guide-problems dd { margin: 0.2rem 0 0.9rem; color: var(--muted); }
+
 @media (max-width: 48.75rem) {
-  .hero, .setup, .faq { grid-template-columns: minmax(0, 1fr); }
+  .hero, .setup, .faq, .guide-layout { grid-template-columns: minmax(0, 1fr); }
   h1 { font-size: clamp(3.15rem, 10vw, 5.3rem); }
   .hero { padding-block: 2.75rem; }
   .features { grid-template-columns: minmax(0, 1fr); }
-  .app-figure { justify-self: start; width: min(100%, 26rem); }
+  .app-figure { justify-self: start; width: min(100%, 29rem); }
 }
 
 @media (max-width: 32rem) {
   .header-inner { padding-block: 0.6rem; }
   .nav-links { gap: 0 0.9rem; }
+  .download-grid { grid-template-columns: minmax(0, 1fr); }
   .nav-links .github-link { padding-inline: 0; border-color: transparent; }
   .requirements > div:last-child { padding-inline-end: 0; }
 }

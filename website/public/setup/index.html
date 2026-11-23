@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Install Second Monitor, connect your Android tablet over USB, and start using it as an extended Windows display.">
+  <meta name="theme-color" content="#f5f6ef">
+  <title>Setup guide — Second Monitor</title>
+  <link rel="icon" href="../assets/app-icon.webp" type="image/webp">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="../">
+        <img src="../assets/app-icon.webp" width="34" height="34" alt="">
+        Second Monitor
+      </a>
+      <nav aria-label="Main navigation">
+        <ul class="nav-links">
+          <li><a href="../#features">Features</a></li>
+          <li><a href="../downloads/">Downloads</a></li>
+          <li><a href="./" aria-current="page">Setup</a></li>
+          <li><a href="../#faq">FAQ</a></li>
+          <li><a class="github-link" href="https://github.com/TristanSibug/SecondMonitor">GitHub <svg class="link-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 12 4M5 4h7v7"/></svg></a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell content-page" id="main">
+    <div class="page-intro">
+      <h1>Setup guide</h1>
+      <p class="lede">Install Second Monitor on your PC, connect your tablet, and start using it as a second screen.</p>
+      <a class="button" href="../downloads/">Get the installer <span aria-hidden="true">↓</span></a>
+    </div>
+
+    <div class="guide-layout">
+      <nav class="guide-nav" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          <li><a href="#requirements">Before you start</a></li>
+          <li><a href="#install">Install on Windows</a></li>
+          <li><a href="#connect">Connect your tablet</a></li>
+          <li><a href="#stream">Start streaming</a></li>
+          <li><a href="#manual">Manual installation</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+        </ul>
+      </nav>
+
+      <div class="guide-content">
+        <section id="requirements" aria-labelledby="requirements-title">
+          <h2 id="requirements-title">Before you start</h2>
+          <ul>
+            <li>A 64-bit Windows 10 or 11 PC with administrator access.</li>
+            <li>An Android tablet running Android 5.0 or newer and a USB data cable.</li>
+            <li>Internet access on the PC if the installer needs to download dependencies using Windows Package Manager (winget).</li>
+          </ul>
+          <p>Updating from an older version? Right-click the Second Monitor icon in the Windows system tray and select <strong>Exit</strong> first. The tablet app is unchanged in version 1.5, so you can keep the copy already installed.</p>
+        </section>
+
+        <section id="install" aria-labelledby="install-title">
+          <h2 id="install-title">Install on Windows</h2>
+          <ol>
+            <li>Download the <a href="../downloads/">Windows installer</a>, open it, and approve the Windows administrator prompt.</li>
+            <li>Keep <strong>Install missing required programs with winget</strong> selected. Setup can install .NET 10 Desktop Runtime, ffmpeg, Android platform-tools (adb), and Virtual Display Driver.</li>
+            <li>Follow any driver prompts and restart Windows if asked. If Setup lists dependencies it could not install, use the <a href="#manual">manual installation</a> instructions for those items.</li>
+          </ol>
+        </section>
+
+        <section id="connect" aria-labelledby="connect-title">
+          <h2 id="connect-title">Connect your tablet</h2>
+          <ol>
+            <li>On the tablet, open <strong>Settings</strong> and find <strong>Build number</strong> under <strong>About tablet</strong>. Tap it seven times to enable Developer options. Some tablets show Build number under <strong>Software information</strong>.</li>
+            <li>Open <strong>Developer options</strong> and turn on <strong>USB debugging</strong>. Connect and unlock the tablet using a USB data cable. When it asks <strong>Allow USB debugging?</strong>, choose <strong>Allow</strong>.</li>
+            <li>If the app is new to the tablet, select <strong>Install tablet app over USB</strong> on the installer’s final page. You can also run <strong>Install tablet app (USB)</strong> from the Windows Start menu later.</li>
+          </ol>
+        </section>
+
+        <section id="stream" aria-labelledby="stream-title">
+          <h2 id="stream-title">Start streaming</h2>
+          <ol>
+            <li>Open <strong>Second Monitor</strong> from the Windows Start menu or launch the portable app.</li>
+            <li>Select your secondary virtual display in the monitor list. Choose <strong>Connect monitor</strong> to activate a disconnected display and begin streaming, or <strong>Start</strong> if the display is already connected.</li>
+            <li>Open Second Monitor on the tablet if it hasn’t opened automatically. Drag a window onto the extended desktop. Use Windows Display settings to arrange the two screens.</li>
+          </ol>
+          <p><strong>Stop</strong> ends streaming while keeping the extended desktop active. <strong>Disconnect monitor</strong> removes that display from the active desktop and brings its windows back to the remaining displays.</p>
+        </section>
+
+        <section id="manual" aria-labelledby="manual-title">
+          <h2 id="manual-title">Manual installation</h2>
+          <ol>
+            <li>On Windows, install the <a href="https://dotnet.microsoft.com/en-us/download/dotnet/10.0">.NET 10 Desktop Runtime</a>, a recent <a href="https://ffmpeg.org/download.html">ffmpeg build</a>, and <a href="https://developer.android.com/tools/releases/platform-tools">Android platform-tools</a>. Put <code>ffmpeg.exe</code> beside the portable app or on your PATH, and add adb to your PATH. GPU capture requires ffmpeg 6.0 or newer.</li>
+            <li>Install a virtual display driver. To install Virtual Display Driver with winget, open Windows Terminal and run <code>winget install --id=VirtualDrivers.Virtual-Display-Driver -e</code>.</li>
+            <li>On the <a href="../downloads/#manual-downloads">Downloads page</a>, get the portable Windows app and the Android APK. Install the APK on the tablet and allow installation from that source if prompted.</li>
+            <li>Enable USB debugging, connect the tablet, and authorize the PC. Open the portable app and follow the <a href="#stream">streaming instructions</a>.</li>
+          </ol>
+        </section>
+
+        <section id="troubleshooting" aria-labelledby="troubleshooting-title">
+          <h2 id="troubleshooting-title">Troubleshooting</h2>
+          <p>Click <strong>Check setup</strong> in Second Monitor to check ffmpeg, the selected encoder, tablet authorization, and the selected monitor. Find the results in the app’s log.</p>
+          <dl class="guide-problems">
+            <dt>The tablet isn’t detected</dt>
+            <dd>Unlock the tablet, try a USB data cable, and check for the USB debugging prompt. If you have adb installed, <code>adb devices</code> should show the tablet as <code>device</code>.</dd>
+            <dt>The virtual display doesn’t appear</dt>
+            <dd>Confirm the virtual display driver is installed and Windows can see the display. Click <strong>Refresh</strong> in Second Monitor and select the secondary display.</dd>
+            <dt>The tablet screen is black</dt>
+            <dd>Switch <strong>Screen capture</strong> to <strong>Standard</strong> and try the <strong>CPU (libx264)</strong> encoder. Check the app log for ffmpeg errors.</dd>
+            <dt>Windows are still on the tablet display</dt>
+            <dd>Choose <strong>Disconnect monitor</strong> to return the windows to your remaining displays.</dd>
+          </dl>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="shell footer">
+    <a class="brand" href="../">
+      <img src="../assets/app-icon.webp" width="30" height="30" alt="">
+      Second Monitor
+    </a>
+    <div class="footer-links"><a href="https://tjesibug.online/">Tristan Sibug</a><a href="https://github.com/TristanSibug/SecondMonitor/issues">Report an issue</a></div>
+  </footer>
+</body>
+</html>
