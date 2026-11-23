@@ -351,6 +351,8 @@ details p { max-width: 54ch; padding-block: 0 1rem; color: var(--muted); }
 }
 
 .footer-links { display: flex; flex-wrap: wrap; gap: 0 1.25rem; }
+.footer-links a { text-decoration: none; }
+.footer-links a:hover { text-decoration: underline; }
 
 .content-page { padding-block: clamp(2.75rem, 6vw, 5.5rem); }
 
