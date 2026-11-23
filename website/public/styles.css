@@ -32,6 +32,10 @@
 
 * { box-sizing: border-box; }
 
+@media (prefers-reduced-motion: no-preference) {
+  :root:has(#faq:target) { scroll-behavior: smooth; }
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -384,7 +388,13 @@ details p { max-width: 54ch; padding-block: 0 1rem; color: var(--muted); }
   margin-block: 1.15rem 0.5rem;
 }
 
+.download-grid .feature {
+  display: flex;
+  flex-direction: column;
+}
+
 .download-grid h3 { margin-block-start: 0; }
+.download-file { margin-block-start: auto; }
 
 .guide-layout {
   display: grid;
@@ -402,7 +412,17 @@ details p { max-width: 54ch; padding-block: 0 1rem; color: var(--muted); }
 
 .guide-nav p { font-weight: 750; }
 .guide-nav ul { margin: 0.35rem 0 0; padding: 0; list-style: none; }
-.guide-nav a { display: flex; align-items: center; min-block-size: 44px; font-size: 0.93rem; }
+.guide-nav a {
+  display: flex;
+  align-items: center;
+  min-block-size: 44px;
+  padding-inline: 0.4rem;
+  border-radius: 0.35rem;
+  font-size: 0.93rem;
+  text-decoration: none;
+}
+
+.guide-nav a:hover { background: #e7eedf; }
 
 .guide-content { max-width: 71ch; }
 .guide-content section + section {
