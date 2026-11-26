@@ -18,31 +18,16 @@ const features = Array.from(featureDemo.children, (article) => {
   tabList.append(tab);
 
   const panel = document.createElement('div');
-  const copy = document.createElement('div');
-  const play = document.createElement('button');
+  const copy = article.querySelector('p');
   const scene = sceneTemplate.content.firstElementChild.cloneNode(true);
   panel.className = 'demo-panel';
   panel.setAttribute('role', 'tabpanel');
   panel.setAttribute('aria-labelledby', tab.id);
   panel.tabIndex = 0;
   copy.className = 'demo-copy';
-  play.type = 'button';
-  play.className = 'demo-play';
-  play.textContent = 'Play demo';
   scene.dataset.mode = mode;
-  copy.append(article.querySelector('p'), play);
   panel.append(copy, scene);
-
-  function playDemo() {
-    if (!motion.matches) return;
-    scene.classList.remove('is-playing');
-    // Apply the reset before replaying the CSS animations.
-    void scene.offsetWidth;
-    scene.classList.add('is-playing');
-  }
-
-  play.addEventListener('click', playDemo);
-  return { tab, panel, playDemo, scene };
+  return { tab, panel, scene };
 });
 
 let selectedIndex = 0;
@@ -56,7 +41,12 @@ function selectFeature(index, animate = true) {
     feature.panel.hidden = !selected;
     feature.scene.classList.remove('is-playing');
   }
-  if (animate) features[index].playDemo();
+  if (animate && motion.matches) {
+    const { scene } = features[index];
+    // Apply the reset before replaying an already selected tab.
+    void scene.offsetWidth;
+    scene.classList.add('is-playing');
+  }
 }
 
 for (const [index, feature] of features.entries()) {

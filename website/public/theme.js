@@ -5,6 +5,7 @@
   const scheme = document.querySelector('meta[name="color-scheme"]');
   const chromeColor = document.querySelector('meta[name="theme-color"]');
   const systemDark = matchMedia('(prefers-color-scheme: dark)');
+  const motion = matchMedia('(prefers-reduced-motion: no-preference)');
   let control;
   let preference;
 
@@ -20,6 +21,18 @@
     }
   }
 
+  function toggleTheme() {
+    const dark = preference ? preference === 'dark' : systemDark.matches;
+    const next = dark === systemDark.matches ? (dark ? 'light' : 'dark') : null;
+    applyTheme(next);
+    try {
+      if (next) localStorage.setItem(key, next);
+      else localStorage.removeItem(key);
+    } catch {
+      // Keep the current page usable if browser storage is blocked.
+    }
+  }
+
   try {
     applyTheme(localStorage.getItem(key));
   } catch {
@@ -32,14 +45,10 @@
     control.hidden = false;
 
     control.addEventListener('click', () => {
-      const dark = preference ? preference === 'dark' : systemDark.matches;
-      const next = dark === systemDark.matches ? (dark ? 'light' : 'dark') : null;
-      applyTheme(next);
-      try {
-        if (next) localStorage.setItem(key, next);
-        else localStorage.removeItem(key);
-      } catch {
-        // Keep the current page usable if browser storage is blocked.
+      if (motion.matches && document.startViewTransition) {
+        document.startViewTransition(toggleTheme);
+      } else {
+        toggleTheme();
       }
     });
   });

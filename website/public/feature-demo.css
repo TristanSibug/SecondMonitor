@@ -44,8 +44,7 @@
 .demo-tabs .feature-icon { flex: none; }
 
 .demo-tabs button:focus-visible,
-.demo-panel:focus-visible,
-.demo-play:focus-visible {
+.demo-panel:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -61,33 +60,11 @@
   background: var(--surface);
 }
 
-.demo-copy { max-width: 31ch; }
-.demo-copy p { color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.15rem); }
-
-.demo-play {
-  display: none;
-  align-items: center;
-  gap: 0.55rem;
-  min-block-size: 44px;
-  margin-block-start: 0.85rem;
-  padding: 0.55rem 0.8rem;
-  border: 1px solid var(--accent-edge);
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--ink);
-  font: 700 0.9rem var(--body-font);
-  cursor: pointer;
+.demo-copy {
+  max-width: 31ch;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.5vw, 1.15rem);
 }
-
-.demo-play::before {
-  content: "";
-  width: 0;
-  height: 0;
-  border-block: 0.31rem solid transparent;
-  border-inline-start: 0.48rem solid currentColor;
-}
-
-.demo-play:hover { background: var(--soft); }
 
 .demo-scene {
   position: relative;
@@ -282,8 +259,6 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .demo-play { display: inline-flex; }
-
   [data-mode="extend"].is-playing .demo-notes {
     animation: demo-extend 1.35s ease-in-out both;
   }
