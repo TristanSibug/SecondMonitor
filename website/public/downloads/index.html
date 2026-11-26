@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Download the Second Monitor Windows installer, portable app, or Android APK.">
+  <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f5f6ef">
+  <script src="../theme.js"></script>
   <title>Downloads — Second Monitor</title>
   <link rel="icon" href="../assets/app-icon.webp" type="image/webp">
   <link rel="stylesheet" href="../styles.css">
@@ -26,24 +28,29 @@
           <li><a class="github-link" href="https://github.com/TristanSibug/SecondMonitor">GitHub <svg class="link-icon" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 12 4M5 4h7v7"/></svg></a></li>
         </ul>
       </nav>
+      <button class="theme-toggle" type="button" aria-label="Dark theme" aria-pressed="false" title="Switch to dark theme" hidden>
+        <svg class="theme-moon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 15.4A9 9 0 0 1 8.6 3.2 9 9 0 1 0 20.8 15.4Z"/></svg>
+        <svg class="theme-sun" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></svg>
+      </button>
     </div>
   </header>
 
   <main class="shell content-page" id="main">
     <div class="page-intro">
       <h1>Downloads</h1>
-      <p class="lede">Use the Windows installer for your first setup. It includes the tablet app and can install missing Windows dependencies.</p>
+      <p class="lede">Start with the Windows installer. The portable app and standalone Android APK are available for manual setup.</p>
     </div>
 
-    <section class="download-primary" aria-labelledby="installer-title">
+    <section class="download-primary" id="windows-installer" aria-labelledby="installer-title">
       <div>
         <p class="eyebrow">Version 1.5.0</p>
         <h2 id="installer-title">Windows installer</h2>
-        <p>For Windows 10 or 11 (64-bit). The installer can send the Android app to your tablet over USB.</p>
+        <p>Run this installer on your Windows 10 or 11 PC (64-bit). It includes the Android app and can install missing Windows dependencies.</p>
       </div>
       <div class="download-action">
-        <a class="button" href="https://github.com/TristanSibug/SecondMonitor/releases/download/v1.5.0/SecondMonitorSetup-1.5.exe">Download installer <span aria-hidden="true">↓</span></a>
+        <a class="button" href="https://github.com/TristanSibug/SecondMonitor/releases/download/v1.5.0/SecondMonitorSetup-1.5.exe">Download Windows installer <span aria-hidden="true">↓</span></a>
         <p class="file-info">EXE · 3.98 MB</p>
+        <p class="signing-notice">Second Monitor plans to use the <a href="https://signpath.org/">SignPath Foundation</a> for Windows code signing, pending approval.</p>
       </div>
     </section>
 
@@ -72,7 +79,6 @@
     </section>
 
     <a class="button" href="../setup/">View setup guide <span aria-hidden="true">→</span></a>
-    <p class="signing-notice">Second Monitor plans to use the <a href="https://signpath.org/">SignPath Foundation</a> for Windows code signing, pending approval.</p>
   </main>
 
   <footer class="shell footer">
