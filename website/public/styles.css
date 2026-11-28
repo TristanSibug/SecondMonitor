@@ -435,7 +435,6 @@ details p { max-width: 54ch; padding-block: 0 1rem; color: var(--muted); }
 
 .download-options { margin-block: clamp(2rem, 5vw, 3.5rem); }
 .download-options > p { margin-block-start: 0.65rem; color: var(--muted); }
-.signing-notice { margin-block-start: 0.65rem; font-size: 0.85rem; }
 
 .download-grid {
   display: grid;
